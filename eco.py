@@ -516,4 +516,125 @@ async def handle(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     mtbf = aot / fail if fail > 0 else aot
                     av = mtbf / (mtbf + mttr) * 100 if (mtbf + mttr) > 0 else 0
                     
-              
+                    user_data["metrics"] = {"aot": aot, "mttr": mttr, "mtbf": mtbf, "av": av}
+                    
+                    await update.message.reply_text("📊 Generating reports...")
+                    
+                    img1 = metrics_table(aot, mttr, mtbf, av)
+                    await update.message.reply_photo(img1, caption="📈 **Performance Metrics**", parse_mode='Markdown')
+                    
+                    img2 = pareto_table(user_data["causes_dict"])
+                    await update.message.reply_photo(img2, caption="📊 **Pareto Analysis Table**", parse_mode='Markdown')
+                    
+                    img3 = pareto_chart(user_data["causes_dict"])
+                    await update.message.reply_photo(img3, caption="📉 **Pareto Chart**", parse_mode='Markdown')
+                    
+                    del user_data["step_5_sub"]
+                    user_data["step"] = 6
+                    user_data["why5_list"] = []
+                    save_user(uid, user_data)
+                    
+                    await update.message.reply_text(f"🔍 **5 Why Analysis**\n\nWhy ({user_data['problem']})?")
+                    
+                except Exception as e:
+                    await update.message.reply_text(f"❌ Error: {e}")
+                    user_data["step_5_sub"] = 0
+                    save_user(uid, user_data)
+                return
+        
+        # Step 6: 5 Why Analysis
+        if step == 6:
+            user_data["why5_list"].append(text)
+            
+            if len(user_data["why5_list"]) < 5:
+                save_user(uid, user_data)
+                prev_why = user_data["why5_list"][-1]
+                await update.message.reply_text(f"❓ Why ({prev_why})?")
+            else:
+                # Generate SMART analysis
+                root_cause, recommendation, top_causes = smart_analysis(
+                    user_data["causes_dict"],
+                    user_data.get("metrics", {}),
+                    user_data["why5_list"],
+                    user_data["problem"]
+                )
+                
+                img4 = why5_table(user_data["problem"], user_data["why5_list"])
+                await update.message.reply_photo(img4, caption="🔍 **5 Why Analysis**", parse_mode='Markdown')
+                
+                # Prepare final report
+                metrics = user_data.get("metrics", {})
+                
+                final_report = f"""
+🎯 **FINAL QUALITY ANALYSIS REPORT**
+
+📝 **Problem:** {user_data['problem']}
+🏭 **Department:** {user_data.get('department', 'Not specified')}
+
+📊 **Pareto Analysis - Top Causes:**
+{', '.join(top_causes)}
+
+📈 **Performance Metrics:**
+• MTBF: {metrics.get('mtbf', 0):.2f} hours
+• MTTR: {metrics.get('mttr', 0):.2f} hours
+• Availability: {metrics.get('av', 0):.2f}%
+• Actual Operating Time: {metrics.get('aot', 0):.2f} hours
+
+🔍 **5 Why Analysis Chain:**
+"""
+                for i, why in enumerate(user_data["why5_list"], 1):
+                    final_report += f"{i}. {why}\n"
+                
+                final_report += f"""
+
+🧠 **SMART ROOT CAUSE ANALYSIS:**
+{root_cause}
+
+💡 **RECOMMENDATIONS:**
+{recommendation}
+
+✅ Analysis completed by Quality Analysis Bot - Smart Edition
+"""
+                
+                await update.message.reply_text(final_report, parse_mode='Markdown')
+                
+                # Summary of causes
+                summary = "📋 **Summary of Entered Causes:**\n\n"
+                for cause, values in user_data["causes_dict"].items():
+                    summary += f"• **{cause}**: {len(values)} cause(s) (values: {values})\n"
+                await update.message.reply_text(summary, parse_mode='Markdown')
+                
+                user_data["step"] = 7
+                save_user(uid, user_data)
+                
+                await update.message.reply_text(
+                    "🎉 **Analysis Completed!**\n\n"
+                    "For a new analysis, send /reset then /start"
+                )
+        
+    except Exception as e:
+        await update.message.reply_text(f"❌ Error: {e}\nPlease try again or use /reset")
+        print(f"Error: {e}")
+
+# ========= RUN BOT =========
+def main():
+    app = ApplicationBuilder().token(TOKEN).build()
+    
+    app.add_handler(CommandHandler("start", start))
+    app.add_handler(CommandHandler("reset", reset))
+    app.add_handler(CommandHandler("status", status))
+    app.add_handler(CommandHandler("help", help_command))
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle))
+    
+    print("Bot is running...")
+    app.run_polling()
+
+if __name__ == "__main__":
+    main()
+
+
+
+
+
+
+
