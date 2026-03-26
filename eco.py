@@ -360,46 +360,91 @@ async def handle(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     await update.message.reply_text("❌ Please enter a valid number")
                 return
             
-            # Step 5.3: Total repair time
-            if "repair" not in user_data:
-                try:
-                    clean_text = text.replace(',', '.').strip()
-                    user_data["repair"] = float(clean_text)
-                    
-                    total = user_data["total"]
-                    stops = user_data["stops"]
-                    fail = user_data["fail"]
-                    repair = user_data["repair"]
-                    
-                    aot = total - stops
-                    mttr = repair / fail if fail > 0 else 0
-                    mtbf = aot / fail if fail > 0 else aot
-                    av = mtbf / (mtbf + mttr) * 100 if (mtbf + mttr) > 0 else 0
-                    
-                    user_data["metrics"] = {"aot": aot, "mttr": mttr, "mtbf": mtbf, "av": av}
-                    
-                    await update.message.reply_text("📊 Generating reports...")
-                    
-                    img1 = metrics_table(aot, mttr, mtbf, av)
-                    await update.message.reply_photo(img1, caption="📈 **Performance Metrics**", parse_mode='Markdown')
-                    
-                    img2 = pareto_table(user_data["causes_dict"])
-                    await update.message.reply_photo(img2, caption="📊 **Pareto Analysis Table**", parse_mode='Markdown')
-                    
-                    img3 = pareto_chart(user_data["causes_dict"])
-                    await update.message.reply_photo(img3, caption="📉 **Pareto Chart**", parse_mode='Markdown')
-                    
-                    user_data["step"] = 6
-                    user_data["why5_list"] = []
-                    save_user(uid, user_data)
-                    
-                    await update.message.reply_text(f"🔍 **5 Why Analysis**\n\nWhy ({user_data['problem']})?")
-                    
-                except Exception as e:
-                    await update.message.reply_text(f"❌ Error: {e}")
-                    user_data["step"] = 5
-                    save_user(uid, user_data)
-                return
+# Step 5: Operating parameters
+if step == 5:
+    # Initialize step_5_sub if not exists
+    if "step_5_sub" not in user_data:
+        user_data["step_5_sub"] = 0
+    
+    # Step 5.0: Total operating time
+    if user_data["step_5_sub"] == 0:
+        try:
+            clean_text = text.replace(',', '.').strip()
+            user_data["total"] = float(clean_text)
+            user_data["step_5_sub"] = 1
+            save_user(uid, user_data)
+            await update.message.reply_text("⏸️ What is the planned stop time (in hours)?")
+        except ValueError:
+            await update.message.reply_text("❌ Please enter a valid number (example: 100 or 100.5)")
+        return
+    
+    # Step 5.1: Planned stops
+    if user_data["step_5_sub"] == 1:
+        try:
+            clean_text = text.replace(',', '.').strip()
+            user_data["stops"] = float(clean_text)
+            user_data["step_5_sub"] = 2
+            save_user(uid, user_data)
+            await update.message.reply_text("🔧 How many failures?")
+        except ValueError:
+            await update.message.reply_text("❌ Please enter a valid number")
+        return
+    
+    # Step 5.2: Number of failures
+    if user_data["step_5_sub"] == 2:
+        try:
+            clean_text = text.replace(',', '.').strip()
+            user_data["fail"] = float(clean_text)
+            user_data["step_5_sub"] = 3
+            save_user(uid, user_data)
+            await update.message.reply_text("🛠️ What is the total repair time (in hours)?")
+        except ValueError:
+            await update.message.reply_text("❌ Please enter a valid number")
+        return
+    
+    # Step 5.3: Total repair time
+    if user_data["step_5_sub"] == 3:
+        try:
+            clean_text = text.replace(',', '.').strip()
+            user_data["repair"] = float(clean_text)
+            
+            total = user_data["total"]
+            stops = user_data["stops"]
+            fail = user_data["fail"]
+            repair = user_data["repair"]
+            
+            aot = total - stops
+            mttr = repair / fail if fail > 0 else 0
+            mtbf = aot / fail if fail > 0 else aot
+            av = mtbf / (mtbf + mttr) * 100 if (mtbf + mttr) > 0 else 0
+            
+            user_data["metrics"] = {"aot": aot, "mttr": mttr, "mtbf": mtbf, "av": av}
+            
+            await update.message.reply_text("📊 Generating reports...")
+            
+            img1 = metrics_table(aot, mttr, mtbf, av)
+            await update.message.reply_photo(img1, caption="📈 **Performance Metrics**", parse_mode='Markdown')
+            
+            img2 = pareto_table(user_data["causes_dict"])
+            await update.message.reply_photo(img2, caption="📊 **Pareto Analysis Table**", parse_mode='Markdown')
+            
+            img3 = pareto_chart(user_data["causes_dict"])
+            await update.message.reply_photo(img3, caption="📉 **Pareto Chart**", parse_mode='Markdown')
+            
+            # Clear step 5 variables
+            del user_data["step_5_sub"]
+            user_data["step"] = 6
+            user_data["why5_list"] = []
+            save_user(uid, user_data)
+            
+            await update.message.reply_text(f"🔍 **5 Why Analysis**\n\nWhy ({user_data['problem']})?")
+            
+        except Exception as e:
+            await update.message.reply_text(f"❌ Error: {e}")
+            # Reset to beginning of step 5
+            user_data["step_5_sub"] = 0
+            save_user(uid, user_data)
+        return
         
         # Step 6: 5 Why Analysis
         if step == 6:
