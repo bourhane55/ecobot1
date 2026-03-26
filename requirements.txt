@@ -1,2 +1,4 @@
-python-telegram-bot==20.5
-matplotlib==3.8.0
+python-telegram-bot==13.17
+httpx==0.23.3
+httpcore==0.15.0
+matplotlib==3.5.3
