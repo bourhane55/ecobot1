@@ -6,34 +6,30 @@ import json
 import os
 from datetime import datetime
 
-# ========= الإعدادات =========
-TOKEN = '8299170161:AAHCsVWMp4aiGGTj_R9O2iaL7NmYPWWoT_s'
+# ========= SETTINGS =========
+TOKEN = '8299170161:AAH0RuCnLkaBuOL1N-uSBvBxD6FxyO6XYt4'
 DATA_FILE = 'user_data.json'
 
-# ========= إدارة البيانات =========
+# ========= DATA MANAGEMENT =========
 def load_data():
-    """تحميل البيانات من الملف"""
     if os.path.exists(DATA_FILE):
         with open(DATA_FILE, 'r', encoding='utf-8') as f:
             return json.load(f)
     return {}
 
 def save_data(data):
-    """حفظ البيانات في الملف"""
     with open(DATA_FILE, 'w', encoding='utf-8') as f:
         json.dump(data, f, ensure_ascii=False, indent=2)
 
-# تحميل البيانات عند بدء التشغيل
 users = load_data()
 
-# ========= قوائم ثابتة =========
+# ========= CONSTANTS =========
 main_causes = ["Method", "Materials", "Measurement", "Human", "Machine", "Environment"]
 main_causes_ar = ["الطريقة", "المواد", "القياس", "العامل", "الآلة", "البيئة"]
 cause_map = dict(zip(main_causes_ar, main_causes))
 
-# ========= دوال المساعدة =========
+# ========= HELPER FUNCTIONS =========
 def get_user(uid):
-    """الحصول على بيانات المستخدم أو إنشاء جديدة"""
     uid = str(uid)
     if uid not in users:
         users[uid] = {
@@ -48,20 +44,17 @@ def get_user(uid):
     return users[uid]
 
 def save_user(uid, data):
-    """حفظ بيانات مستخدم معين"""
     users[str(uid)] = data
     save_data(users)
 
 def delete_user(uid):
-    """حذف بيانات مستخدم"""
     uid = str(uid)
     if uid in users:
         del users[uid]
         save_data(users)
 
-# ========= دوال الرسوم البيانية =========
+# ========= CHART FUNCTIONS =========
 def metrics_table(aot, mttr, mtbf, av):
-    """جدول المعايير"""
     fig, ax = plt.subplots(figsize=(8, 4))
     ax.axis('off')
     
@@ -88,7 +81,6 @@ def metrics_table(aot, mttr, mtbf, av):
     return bio
 
 def pareto_table(causes_dict):
-    """جدول باريتو"""
     counts = {k: sum(v) for k, v in causes_dict.items()}
     sorted_items = sorted(counts.items(), key=lambda x: x[1], reverse=True)
     total = sum(counts.values())
@@ -115,7 +107,6 @@ def pareto_table(causes_dict):
     return bio
 
 def pareto_chart(causes_dict):
-    """مخطط باريتو"""
     counts = {k: sum(v) for k, v in causes_dict.items()}
     sorted_items = sorted(counts.items(), key=lambda x: x[1], reverse=True)
     
@@ -152,7 +143,6 @@ def pareto_chart(causes_dict):
     return bio
 
 def why5_table(problem, why_list):
-    """جدول تحليل 5 لماذا"""
     fig, ax = plt.subplots(figsize=(10, len(why_list)*0.8+2))
     ax.axis('off')
     
@@ -168,61 +158,8 @@ def why5_table(problem, why_list):
     plt.close()
     return bio
 
-# ========= دوال التحليل الذكي =========
-def analyze_root_cause(why_list, top_causes, metrics):
-    """تحليل ذكي للسبب الجذري"""
-    last_why = why_list[-1].lower() if why_list else ""
-    
-    # كلمات مفتاحية للتحليل
-    keywords = {
-        "maintenance": ["maintenance", "صيانة", "réparation", "صيانة"],
-        "human": ["operator", "human", "worker", "عامل", "مستخدم", "تدريب"],
-        "material": ["material", "materials", "مواد", "matière", "جودة"],
-        "machine": ["machine", "equipment", "آلة", "معدات", "جهاز"],
-        "management": ["management", "إدارة", "supervision", "إشراف"]
-    }
-    
-    # تحليل النص
-    for category, words in keywords.items():
-        if any(word in last_why for word in words):
-            return category, last_why
-    
-    return "other", last_why
-
-def generate_recommendation(root_cause, top_causes, metrics):
-    """توليد توصيات ذكية"""
-    recommendations = {
-        "maintenance": {
-            "root": "ضعف برنامج الصيانة الوقائية",
-            "recommendation": "تطبيق نظام صيانة وقائية، جدولة الأعمال الدورية، تدريب فريق الصيانة"
-        },
-        "human": {
-            "root": "ضعف المهارات أو الأخطاء البشرية",
-            "recommendation": "برامج تدريب مكثفة، توثيق الإجراءات، تحسين بيئة العمل"
-        },
-        "material": {
-            "root": "جودة المواد غير مطابقة",
-            "recommendation": "تقييم الموردين، فحص المواد الواردة، توحيد المواصفات"
-        },
-        "machine": {
-            "root": "أعطال متكررة في المعدات",
-            "recommendation": "تطبيق الصيانة التنبؤية، مراقبة الحالة، تحديث المعدات القديمة"
-        },
-        "management": {
-            "root": "ضعف الإدارة والإشراف",
-            "recommendation": "تحسين نظام المتابعة، تحديد مؤشرات الأداء، تعزيز ثقافة الجودة"
-        },
-        "other": {
-            "root": f"عوامل متعددة: {top_causes[0] if top_causes else 'غير محدد'}",
-            "recommendation": "تحليل مفصل للأسباب المحددة، تطبيق إجراءات تصحيحية فورية"
-        }
-    }
-    
-    return recommendations.get(root_cause, recommendations["other"])
-
-# ========= أوامر البوت =========
+# ========= BOT COMMANDS =========
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """بدء المحادثة"""
     uid = update.effective_user.id
     user_data = get_user(uid)
     user_data["step"] = 1
@@ -241,7 +178,6 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 async def reset(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """إعادة تعيين الجلسة"""
     uid = update.effective_user.id
     delete_user(uid)
     await update.message.reply_text(
@@ -250,7 +186,6 @@ async def reset(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """عرض حالة المستخدم"""
     uid = update.effective_user.id
     user_data = get_user(uid)
     
@@ -271,7 +206,6 @@ async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(status_text, parse_mode='Markdown')
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """عرض المساعدة"""
     help_text = """
 🤖 **مساعدة بوت تحليل الجودة**
 
@@ -289,17 +223,11 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 5️⃣ استخدم 'NEXT' لتغيير السبب الرئيسي
 6️⃣ استخدم 'FINISH' لإنهاء إدخال الأسباب
 7️⃣ أدخل معطيات التشغيل
-
-**نصائح:**
-• أدخل الأسباب بالصيغة: 'السبب الرقم'
-• يمكنك إدخال عدة أسباب لكل فئة
-• التحليل يعتمد على MTBF و MTTR
     """
     await update.message.reply_text(help_text, parse_mode='Markdown')
 
-# ========= معالجة الرسائل =========
+# ========= MESSAGE HANDLER =========
 async def handle(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """معالجة الرسائل"""
     uid = update.effective_user.id
     text = update.message.text.strip()
     
@@ -307,7 +235,6 @@ async def handle(update: Update, context: ContextTypes.DEFAULT_TYPE):
         user_data = get_user(uid)
         step = user_data.get("step", 1)
         
-        # ===== المرحلة 1: المشكلة =====
         if step == 1:
             user_data["problem"] = text
             user_data["step"] = 2
@@ -315,7 +242,6 @@ async def handle(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text("🏭 ما هو القسم؟ (مثال: إنتاج، صيانة، جودة)")
             return
         
-        # ===== المرحلة 2: القسم =====
         if step == 2:
             user_data["department"] = text
             user_data["step"] = 3
@@ -328,7 +254,6 @@ async def handle(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
             return
         
-        # ===== المرحلة 3: السبب الرئيسي =====
         if step == 3:
             if text not in main_causes_ar:
                 await update.message.reply_text("❌ الرجاء اختيار سبب من الأزرار")
@@ -351,7 +276,6 @@ async def handle(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
             return
         
-        # ===== المرحلة 4: إدخال الأسباب =====
         if step == 4:
             if text.upper() == "NEXT":
                 user_data["step"] = 3
@@ -373,7 +297,6 @@ async def handle(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 await update.message.reply_text("⏱️ ما هو وقت التشغيل الكلي (بالساعات)؟")
                 return
             
-            # إضافة سبب جديد
             parts = text.strip().split()
             if len(parts) < 2:
                 await update.message.reply_text("❌ الصيغة خاطئة!\nمثال صحيح: 'فساد 1'")
@@ -397,7 +320,6 @@ async def handle(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
             return
         
-        # ===== المرحلة 5: إدخال المعطيات =====
         if step == 5:
             if "total" not in user_data:
                 try:
@@ -433,7 +355,6 @@ async def handle(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 try:
                     user_data["repair"] = float(text)
                     
-                    # حساب المعايير
                     total = user_data["total"]
                     stops = user_data["stops"]
                     fail = user_data["fail"]
@@ -444,10 +365,8 @@ async def handle(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     mtbf = aot / fail if fail > 0 else aot
                     av = mtbf / (mtbf + mttr) * 100 if (mtbf + mttr) > 0 else 0
                     
-                    # حفظ المعايير
                     user_data["metrics"] = {"aot": aot, "mttr": mttr, "mtbf": mtbf, "av": av}
                     
-                    # إرسال الرسوم البيانية
                     await update.message.reply_text("📊 جاري إنشاء التقارير...")
                     
                     img1 = metrics_table(aot, mttr, mtbf, av)
@@ -463,7 +382,7 @@ async def handle(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     user_data["why5_list"] = []
                     save_user(uid, user_data)
                     
-                    await update.message.reply_text(f"🔍 **تحليل 5 لماذا**\n\nلماذا ({user_data['problem']})؟")
+                    await update.message.reply_text(f"🔍 **تحليل 5 لماذا**\n\nلماذا ({user_data['problem']})?")
                     
                 except Exception as e:
                     await update.message.reply_text(f"❌ خطأ: {e}")
@@ -471,16 +390,14 @@ async def handle(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     save_user(uid, user_data)
                 return
         
-        # ===== المرحلة 6: تحليل 5 لماذا =====
         if step == 6:
             user_data["why5_list"].append(text)
             
             if len(user_data["why5_list"]) < 5:
                 save_user(uid, user_data)
                 prev_why = user_data["why5_list"][-1]
-                await update.message.reply_text(f"❓ لماذا ({prev_why})؟")
+                await update.message.reply_text(f"❓ لماذا ({prev_why})?")
             else:
-                # تحليل نهائي
                 causes_dict = user_data["causes_dict"]
                 counts = {k: sum(v) for k, v in causes_dict.items()}
                 sorted_items = sorted(counts.items(), key=lambda x: x[1], reverse=True)
@@ -490,20 +407,36 @@ async def handle(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 mtbf = metrics.get("mtbf", 0)
                 mttr = metrics.get("mttr", 0)
                 
-                # تحليل ذكي
-                root_type, root_text = analyze_root_cause(
-                    user_data["why5_list"],
-                    top_causes,
-                    metrics
-                )
+                last_why = user_data["why5_list"][-1].lower() if user_data["why5_list"] else ""
                 
-                recommendation = generate_recommendation(root_type, top_causes, metrics)
+                maintenance_keywords = ["maintenance", "صيانة", "réparation"]
+                human_keywords = ["operator", "human", "worker", "عامل", "مستخدم"]
+                material_keywords = ["material", "materials", "مواد", "matière"]
+                machine_keywords = ["machine", "equipment", "آلة"]
+                management_keywords = ["management", "إدارة"]
                 
-                # إرسال جدول 5 لماذا
+                if any(word in last_why for word in maintenance_keywords):
+                    root_cause = "ضعف برنامج الصيانة الوقائية"
+                    recommendation = "تطبيق نظام صيانة وقائية، جدولة الأعمال الدورية"
+                elif any(word in last_why for word in human_keywords):
+                    root_cause = "ضعف المهارات أو الأخطاء البشرية"
+                    recommendation = "برامج تدريب مكثفة، توثيق الإجراءات"
+                elif any(word in last_why for word in material_keywords):
+                    root_cause = "جودة المواد غير مطابقة"
+                    recommendation = "تقييم الموردين، فحص المواد الواردة"
+                elif any(word in last_why for word in machine_keywords):
+                    root_cause = "أعطال متكررة في المعدات"
+                    recommendation = "تطبيق الصيانة التنبؤية، تحديث المعدات"
+                elif any(word in last_why for word in management_keywords):
+                    root_cause = "ضعف الإدارة والإشراف"
+                    recommendation = "تحسين نظام المتابعة، تحديد مؤشرات الأداء"
+                else:
+                    root_cause = f"عوامل متعددة: {top_causes[0] if top_causes else 'غير محدد'}"
+                    recommendation = "تحليل مفصل للأسباب المحددة، تطبيق إجراءات تصحيحية"
+                
                 img4 = why5_table(user_data["problem"], user_data["why5_list"])
                 await update.message.reply_photo(img4, caption="🔍 **تحليل 5 لماذا**", parse_mode='Markdown')
                 
-                # تقرير نهائي
                 final_report = f"""
 🎯 **التقرير النهائي لتحليل الجودة**
 
@@ -519,22 +452,16 @@ async def handle(update: Update, context: ContextTypes.DEFAULT_TYPE):
 • التوفر: {metrics.get('av', 0):.2f}%
 
 🔍 **السبب الجذري:**
-{recommendation['root']}
+{root_cause}
 
 💡 **التوصيات:**
-{recommendation['recommendation']}
-
-📌 **الإجراءات المقترحة:**
-1. تطبيق التوصيات المذكورة أعلاه
-2. متابعة المؤشرات أسبوعياً
-3. إعادة التقييم بعد 30 يوماً
+{recommendation}
 
 ✅ تم التحليل بواسطة بوت تحليل الجودة الذكي
 """
                 
                 await update.message.reply_text(final_report, parse_mode='Markdown')
                 
-                # جدول ملخص الأسباب
                 summary = "📋 **ملخص الأسباب المدخلة:**\n\n"
                 for cause, values in causes_dict.items():
                     summary += f"• **{cause}**: {len(values)} سبب (القيم: {values})\n"
@@ -550,6 +477,20 @@ async def handle(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
     except Exception as e:
         await update.message.reply_text(f"❌ حدث خطأ: {e}\nالرجاء المحاولة مرة أخرى أو استخدام /reset")
-        pri
+        print(f"Error: {e}")
 
-                     
+# ========= RUN BOT =========
+def main():
+    app = ApplicationBuilder().token(TOKEN).build()
+    
+    app.add_handler(CommandHandler("start", start))
+    app.add_handler(CommandHandler("reset", reset))
+    app.add_handler(CommandHandler("status", status))
+    app.add_handler(CommandHandler("help", help_command))
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle))
+    
+    print("Bot is running...")
+    app.run_polling()
+
+if __name__ == "__main__":
+    main()
