@@ -9,7 +9,7 @@ import os
 from datetime import datetime
 
 # ========= SETTINGS =========
-TOKEN = '8299170161:AAHCsVWMp4aiGGTj_R9O2iaL7NmYPWWoT_s'
+TOKEN = '8299170161:AAH0RuCnLkaBuOL1N-uSBvBxD6FxyO6XYt4'
 DATA_FILE = 'user_data.json'
 
 # ========= DATA MANAGEMENT =========
@@ -323,44 +323,6 @@ async def handle(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return
         
         # Step 5: Operating parameters
-        if step == 5:
-            # Step 5.0: Total operating time
-            if "total" not in user_data:
-                try:
-                    clean_text = text.replace(',', '.').strip()
-                    user_data["total"] = float(clean_text)
-                    user_data["step"] = 5.1
-                    save_user(uid, user_data)
-                    await update.message.reply_text("⏸️ What is the planned stop time (in hours)?")
-                except ValueError:
-                    await update.message.reply_text("❌ Please enter a valid number (example: 100 or 100.5)")
-                return
-            
-            # Step 5.1: Planned stops
-            if "stops" not in user_data:
-                try:
-                    clean_text = text.replace(',', '.').strip()
-                    user_data["stops"] = float(clean_text)
-                    user_data["step"] = 5.2
-                    save_user(uid, user_data)
-                    await update.message.reply_text("🔧 How many failures?")
-                except ValueError:
-                    await update.message.reply_text("❌ Please enter a valid number")
-                return
-            
-            # Step 5.2: Number of failures
-            if "fail" not in user_data:
-                try:
-                    clean_text = text.replace(',', '.').strip()
-                    user_data["fail"] = float(clean_text)
-                    user_data["step"] = 5.3
-                    save_user(uid, user_data)
-                    await update.message.reply_text("🛠️ What is the total repair time (in hours)?")
-                except ValueError:
-                    await update.message.reply_text("❌ Please enter a valid number")
-                return
-            
-# Step 5: Operating parameters
 if step == 5:
     # Initialize step_5_sub if not exists
     if "step_5_sub" not in user_data:
