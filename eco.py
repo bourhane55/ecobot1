@@ -292,7 +292,129 @@ def smart_analysis(causes_dict, metrics, why5_list, problem):
         root_cause += f" Overall performance impacted: Availability at {availability:.1f}% (target >95%)."
     
     return root_cause, recommendation, top_causes
+    # ========= PROFESSIONAL ROOT CAUSE ANALYSIS WITH RECOMMENDATION =========
+def professional_root_cause_with_recommendation(why5_list, top_causes, mtbf, mttr, availability, primary_cause):
+    """
+    Professional analysis of all 5 Why answers
+    Provides detailed root cause + practical recommendation
+    """
+    
+    # Analyze all answers
+    why_chain = ""
+    for i, answer in enumerate(why5_list, 1):
+        why_chain += f"- Why {i}: \"{answer}\" → "
+        if i == 1:
+            why_chain += "initial symptom\n"
+        elif i == 2:
+            why_chain += "immediate cause\n"
+        elif i == 3:
+            why_chain += "underlying factor\n"
+        elif i == 4:
+            why_chain += "systemic gap\n"
+        else:
+            why_chain += "root cause level\n"
+    
+    # Extract keywords from all answers
+    full_text = " ".join(why5_list).lower()
+    
+    # Determine category and recommendation
+    if any(word in full_text for word in ["maintenance", "صيانة", "program", "schedule", "repair"]):
+        category = "Maintenance System"
+        root = "The organization lacks a structured preventive maintenance system, from management planning down to execution level."
+        impact = f"This leads to frequent equipment failures (MTBF: {mtbf:.1f}h), extended repair times (MTTR: {mttr:.1f}h), and reduced availability ({availability:.1f}%)."
+        recommendation = f"""📋 **RECOMMENDATION:**
 
+1. **Establish Preventive Maintenance Program:** Create a regular inspection schedule for all equipment based on manufacturer recommendations.
+2. **Assign Maintenance Responsibility:** Dedicate a specialized maintenance team with clear roles and responsibilities.
+3. **Develop Tracking System:** Create an electronic maintenance log to track failures and repairs.
+4. **Train Maintenance Team:** Provide training on predictive and preventive maintenance techniques.
+5. **Regular Review:** Conduct weekly meetings to review performance indicators (MTBF, MTTR).
+
+**Target:** Increase MTBF from {mtbf:.1f}h to over 100h within 3 months."""
+    
+    elif any(word in full_text for word in ["training", "تدريب", "skill", "operator", "worker", "error"]):
+        category = "Training & Skills Gap"
+        root = "Insufficient operator training and skill development programs exist, resulting in improper equipment handling and operational errors."
+        impact = f"This contributes to human errors, increased repair time (MTTR: {mttr:.1f}h), and quality issues."
+        recommendation = f"""📋 **RECOMMENDATION:**
+
+1. **Develop Training Program:** Create a comprehensive training plan for all operators.
+2. **Document Procedures:** Write Standard Operating Procedures (SOP) and train workers on them.
+3. **Mentorship System:** Assign experienced supervisors to guide new workers.
+4. **Skill Assessment:** Conduct regular tests to measure worker competency.
+5. **Performance Rewards:** Reward workers who excel in performance and procedure adherence.
+
+**Target:** Reduce MTTR from {mttr:.1f}h to under 2 hours within 2 months."""
+    
+    elif any(word in full_text for word in ["material", "مادة", "quality", "supplier", "raw"]):
+        category = "Material Quality Control"
+        root = "Weak incoming material inspection and supplier quality management allow substandard materials to enter production."
+        impact = f"This causes frequent defects and process instability, affecting MTBF ({mtbf:.1f}h) and product quality."
+        recommendation = f"""📋 **RECOMMENDATION:**
+
+1. **Evaluate Suppliers:** Review current supplier performance and classify them by quality.
+2. **Inspect Incoming Materials:** Establish inspection system for materials before accepting into inventory.
+3. **Define Specifications:** Document precise technical specifications for each raw material.
+4. **Contract Certified Suppliers:** Select suppliers with recognized quality certifications.
+5. **Monitor Performance:** Track defect rates related to materials and provide monthly reports.
+
+**Target:** Reduce material-related defects by 50% within 3 months."""
+    
+    elif any(word in full_text for word in ["management", "إدارة", "planning", "supervision", "organization"]):
+        category = "Management System"
+        root = "Inadequate planning, supervision, and performance monitoring systems fail to establish clear accountability."
+        impact = f"This creates gaps across all operational levels, reflected in poor reliability metrics (MTBF: {mtbf:.1f}h)."
+        recommendation = f"""📋 **RECOMMENDATION:**
+
+1. **Define KPIs:** Establish clear Key Performance Indicators for each department.
+2. **Regular Review Meetings:** Conduct weekly meetings to review performance and analyze deviations.
+3. **Document Responsibilities:** Create detailed job descriptions with clear authorities.
+4. **Tracking System:** Implement an electronic system to monitor task execution.
+5. **Continuous Improvement Culture:** Encourage employees to submit improvement suggestions and reward them.
+
+**Target:** Achieve 20% improvement in all performance indicators within 6 months."""
+    
+    else:
+        category = primary_cause
+        root = f"The primary issue centers on {primary_cause}, with contributing factors identified through the 5 Why analysis."
+        impact = f"This affects equipment reliability (MTBF: {mtbf:.1f}h) and repair efficiency (MTTR: {mttr:.1f}h)."
+        recommendation = f"""📋 **RECOMMENDATION:**
+
+1. **Detailed Analysis:** Conduct in-depth study of {primary_cause} to identify weaknesses precisely.
+2. **Implement Corrective Actions:** Develop action plan to address identified causes.
+3. **Monitor Indicators:** Track MTBF and MTTR weekly.
+4. **Review Results:** Evaluate effectiveness of actions 30 days after implementation.
+5. **Expand Improvements:** Apply lessons learned to other departments.
+
+**Target:** Increase availability to over 90% within 3 months."""
+    
+    # Build final result
+    result = f"""
+🔍 **ROOT CAUSE ANALYSIS**
+
+After analyzing the 5 Why chain, the following root cause has been identified:
+
+**Primary Factor:** {category}
+**Contributing Elements:** {root.split('.')[0]}
+
+**Evidence from 5 Why:**
+{why_chain}
+
+**Conclusion:**
+{root}
+
+**Impact on Metrics:**
+- MTBF: {mtbf:.1f}h {"(below target)" if mtbf < 100 else "(acceptable)"}
+- MTTR: {mttr:.1f}h {"(above target)" if mttr > 2 else "(acceptable)"}
+- Availability: {availability:.1f}%
+- Top Pareto Cause: {primary_cause}
+
+**Root Cause Statement:**
+{root} {impact}
+
+{recommendation}
+"""
+    return result
 # ========= BOT COMMANDS =========
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     uid = update.effective_user.id
