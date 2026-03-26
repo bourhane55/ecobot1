@@ -3,7 +3,7 @@ from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, Con
 import matplotlib.pyplot as plt
 import io
 
-TOKEN = '8299170161:AAH0RuCnLkaBuOL1N-uSBvBxD6FxyO6XYt4'
+TOKEN = '8299170161:AAHCsVWMp4aiGGTj_R9O2iaL7NmYPWWoT_s'
 
 users = {}
 main_causes = ["Method", "Materials", "Measurement", "Human", "Machine", "Environment"]
