@@ -1,406 +1,555 @@
-from telegram import Update, ReplyKeyboardMarkup, InputFile, ReplyKeyboardRemove
+from telegram import Update, ReplyKeyboardMarkup, ReplyKeyboardRemove
 from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, ContextTypes, filters
 import matplotlib.pyplot as plt
 import io
+import json
+import os
+from datetime import datetime
 
-TOKEN = '8299170161:AAHCsVWMp4aiGGTj_R9O2iaL7NmYPWWoT_s'
+# ========= الإعدادات =========
+TOKEN = '8299170161:AAH0RuCnLkaBuOL1N-uSBvBxD6FxyO6XYt4'
+DATA_FILE = 'user_data.json'
 
-users = {}
+# ========= إدارة البيانات =========
+def load_data():
+    """تحميل البيانات من الملف"""
+    if os.path.exists(DATA_FILE):
+        with open(DATA_FILE, 'r', encoding='utf-8') as f:
+            return json.load(f)
+    return {}
+
+def save_data(data):
+    """حفظ البيانات في الملف"""
+    with open(DATA_FILE, 'w', encoding='utf-8') as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
+
+# تحميل البيانات عند بدء التشغيل
+users = load_data()
+
+# ========= قوائم ثابتة =========
 main_causes = ["Method", "Materials", "Measurement", "Human", "Machine", "Environment"]
+main_causes_ar = ["الطريقة", "المواد", "القياس", "العامل", "الآلة", "البيئة"]
+cause_map = dict(zip(main_causes_ar, main_causes))
 
-# ========= ???? ???????? =========
+# ========= دوال المساعدة =========
+def get_user(uid):
+    """الحصول على بيانات المستخدم أو إنشاء جديدة"""
+    uid = str(uid)
+    if uid not in users:
+        users[uid] = {
+            "step": 1,
+            "causes_dict": {},
+            "counter": 1,
+            "why5_list": [],
+            "language": "ar",
+            "created_at": datetime.now().isoformat()
+        }
+        save_data(users)
+    return users[uid]
+
+def save_user(uid, data):
+    """حفظ بيانات مستخدم معين"""
+    users[str(uid)] = data
+    save_data(users)
+
+def delete_user(uid):
+    """حذف بيانات مستخدم"""
+    uid = str(uid)
+    if uid in users:
+        del users[uid]
+        save_data(users)
+
+# ========= دوال الرسوم البيانية =========
 def metrics_table(aot, mttr, mtbf, av):
-    fig, ax = plt.subplots(figsize=(6, 3))
+    """جدول المعايير"""
+    fig, ax = plt.subplots(figsize=(8, 4))
     ax.axis('off')
-    mtbf_note = "Good" if mtbf >= 100 else "Low"
-    mttr_note = "Good" if mttr <= 2 else "High"
-    av_note = "Excellent" if av >= 95 else "Average" if av >= 85 else "Low"
+    
+    mtbf_note = "✅ جيد" if mtbf >= 100 else "⚠️ منخفض"
+    mttr_note = "✅ جيد" if mttr <= 2 else "⚠️ مرتفع"
+    av_note = "✅ ممتاز" if av >= 95 else "⚠️ متوسط" if av >= 85 else "❌ منخفض"
+    
     data = [
-        ["Actual Operating Time", f"{aot:.2f} h", ""],
-        ["MTTR", f"{mttr:.2f} h", mttr_note],
-        ["MTBF", f"{mtbf:.2f} h", mtbf_note],
-        ["Availability", f"{av:.2f} %", av_note]
+        ["وقت التشغيل الفعلي", f"{aot:.2f} ساعة", ""],
+        ["MTTR (متوسط وقت الإصلاح)", f"{mttr:.2f} ساعة", mttr_note],
+        ["MTBF (متوسط الوقت بين الأعطال)", f"{mtbf:.2f} ساعة", mtbf_note],
+        ["التوفر", f"{av:.2f} %", av_note]
     ]
-    table = ax.table(cellText=data, colLabels=["Metric", "Value", "Observation"], loc="center")
+    
+    table = ax.table(cellText=data, colLabels=["المقياس", "القيمة", "الملاحظة"], loc="center")
     table.scale(1, 2)
+    table.auto_set_font_size(False)
+    table.set_fontsize(10)
+    
     bio = io.BytesIO()
-    plt.savefig(bio, bbox_inches="tight")
+    plt.savefig(bio, bbox_inches="tight", dpi=150)
     bio.seek(0)
     plt.close()
     return bio
 
-# ========= Pareto Table =========
 def pareto_table(causes_dict):
+    """جدول باريتو"""
     counts = {k: sum(v) for k, v in causes_dict.items()}
     sorted_items = sorted(counts.items(), key=lambda x: x[1], reverse=True)
     total = sum(counts.values())
     rows = []
     cumulative = 0
+    
     for cause, num in sorted_items:
         percent = (num / total) * 100 if total != 0 else 0
         cumulative += percent
         rows.append([cause, num, f"{percent:.1f}%", f"{cumulative:.1f}%"])
-    fig, ax = plt.subplots(figsize=(6, len(rows)*0.5+1))
+    
+    fig, ax = plt.subplots(figsize=(10, len(rows)*0.5+2))
     ax.axis('off')
-    table = ax.table(cellText=rows, colLabels=["Main Cause", "Count", "%", "Cumulative %"], loc="center")
+    
+    table = ax.table(cellText=rows, colLabels=["السبب الرئيسي", "العدد", "النسبة", "النسبة التراكمية"], loc="center")
     table.scale(1, 2)
+    table.auto_set_font_size(False)
+    table.set_fontsize(10)
+    
     bio = io.BytesIO()
-    plt.savefig(bio, bbox_inches="tight")
+    plt.savefig(bio, bbox_inches="tight", dpi=150)
     bio.seek(0)
     plt.close()
     return bio
 
-# ========= Pareto Chart (?? ??????) =========
 def pareto_chart(causes_dict):
-    counts = {k: len(v) for k, v in causes_dict.items()}
+    """مخطط باريتو"""
+    counts = {k: sum(v) for k, v in causes_dict.items()}
     sorted_items = sorted(counts.items(), key=lambda x: x[1], reverse=True)
-
+    
     labels = [x[0] for x in sorted_items]
     values = [x[1] for x in sorted_items]
-
     total = sum(values)
+    
     cumulative = []
     cumsum = 0
-
     for v in values:
         cumsum += v
         cumulative.append((cumsum / total) * 100 if total != 0 else 0)
-
-    fig, ax1 = plt.subplots()
-
-    # ????? ????? ??? ??? ????? ??? ???
-
-    total = sum([x[1] for x in sorted_items])
-    percent_values = [(v / total) * 100 if total != 0 else 0 for v in [x[1] for x in sorted_items]]
-
-    ax1.bar(labels, percent_values)
-    ax1.set_ylabel("Percentage %")
-    # ???????
+    
+    fig, ax1 = plt.subplots(figsize=(10, 6))
+    
+    percent_values = [(v / total) * 100 if total != 0 else 0 for v in values]
+    bars = ax1.bar(labels, percent_values, color='steelblue', alpha=0.7)
+    ax1.set_ylabel("النسبة المئوية (%)", fontsize=12)
+    ax1.tick_params(axis='x', rotation=45)
+    
     ax2 = ax1.twinx()
-    ax2.plot(labels, cumulative, marker='o')
-    ax2.set_ylabel("Cumulative %")
-    ax2.set_ylim(0, 100)
-
-    # ?? 80% (??????? ??? ???)
-    ax2.axhline(80, linestyle='--')
-
-    plt.title("Pareto Chart")
-
+    ax2.plot(labels, cumulative, marker='o', color='red', linewidth=2, markersize=8)
+    ax2.set_ylabel("النسبة التراكمية (%)", fontsize=12)
+    ax2.set_ylim(0, 105)
+    ax2.axhline(80, linestyle='--', color='gray', alpha=0.7, label='خط 80%')
+    
+    plt.title("مخطط باريتو - تحليل الأسباب", fontsize=14, pad=20)
+    plt.tight_layout()
+    
     bio = io.BytesIO()
-    plt.savefig(bio, bbox_inches="tight")
+    plt.savefig(bio, bbox_inches="tight", dpi=150)
     bio.seek(0)
     plt.close()
-
     return bio
 
-# ========= 5 Why Table =========
 def why5_table(problem, why_list):
-    fig, ax = plt.subplots(figsize=(8, len(why_list)*0.6+1))
+    """جدول تحليل 5 لماذا"""
+    fig, ax = plt.subplots(figsize=(10, len(why_list)*0.8+2))
     ax.axis('off')
-    rows = [[f"Why {i+1}", why] for i, why in enumerate(why_list)]
-    table = ax.table(cellText=rows, colLabels=["Step", f"{problem} 5 Why Analysis"], loc="center")
+    
+    rows = [[f"لماذا {i+1}", why] for i, why in enumerate(why_list)]
+    table = ax.table(cellText=rows, colLabels=["المستوى", f"تحليل المشكلة: {problem}"], loc="center")
     table.scale(1, 2)
+    table.auto_set_font_size(False)
+    table.set_fontsize(10)
+    
     bio = io.BytesIO()
-    plt.savefig(bio, bbox_inches="tight")
+    plt.savefig(bio, bbox_inches="tight", dpi=150)
     bio.seek(0)
     plt.close()
     return bio
 
-# ========= START =========
+# ========= دوال التحليل الذكي =========
+def analyze_root_cause(why_list, top_causes, metrics):
+    """تحليل ذكي للسبب الجذري"""
+    last_why = why_list[-1].lower() if why_list else ""
+    
+    # كلمات مفتاحية للتحليل
+    keywords = {
+        "maintenance": ["maintenance", "صيانة", "réparation", "صيانة"],
+        "human": ["operator", "human", "worker", "عامل", "مستخدم", "تدريب"],
+        "material": ["material", "materials", "مواد", "matière", "جودة"],
+        "machine": ["machine", "equipment", "آلة", "معدات", "جهاز"],
+        "management": ["management", "إدارة", "supervision", "إشراف"]
+    }
+    
+    # تحليل النص
+    for category, words in keywords.items():
+        if any(word in last_why for word in words):
+            return category, last_why
+    
+    return "other", last_why
+
+def generate_recommendation(root_cause, top_causes, metrics):
+    """توليد توصيات ذكية"""
+    recommendations = {
+        "maintenance": {
+            "root": "ضعف برنامج الصيانة الوقائية",
+            "recommendation": "تطبيق نظام صيانة وقائية، جدولة الأعمال الدورية، تدريب فريق الصيانة"
+        },
+        "human": {
+            "root": "ضعف المهارات أو الأخطاء البشرية",
+            "recommendation": "برامج تدريب مكثفة، توثيق الإجراءات، تحسين بيئة العمل"
+        },
+        "material": {
+            "root": "جودة المواد غير مطابقة",
+            "recommendation": "تقييم الموردين، فحص المواد الواردة، توحيد المواصفات"
+        },
+        "machine": {
+            "root": "أعطال متكررة في المعدات",
+            "recommendation": "تطبيق الصيانة التنبؤية، مراقبة الحالة، تحديث المعدات القديمة"
+        },
+        "management": {
+            "root": "ضعف الإدارة والإشراف",
+            "recommendation": "تحسين نظام المتابعة، تحديد مؤشرات الأداء، تعزيز ثقافة الجودة"
+        },
+        "other": {
+            "root": f"عوامل متعددة: {top_causes[0] if top_causes else 'غير محدد'}",
+            "recommendation": "تحليل مفصل للأسباب المحددة، تطبيق إجراءات تصحيحية فورية"
+        }
+    }
+    
+    return recommendations.get(root_cause, recommendations["other"])
+
+# ========= أوامر البوت =========
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """بدء المحادثة"""
     uid = update.effective_user.id
-    users[uid] = {"step": 1, "causes_dict": {}, "counter": 1, "why5_list": []}
-    await update.message.reply_text("? What is your problem?")
+    user_data = get_user(uid)
+    user_data["step"] = 1
+    user_data["causes_dict"] = {}
+    user_data["counter"] = 1
+    user_data["why5_list"] = []
+    save_user(uid, user_data)
+    
+    await update.message.reply_text(
+        "مرحباً بك في بوت تحليل الجودة المتطور! 🤖\n\n"
+        "سأساعدك في تحليل مشكلات الجودة باستخدام:\n"
+        "📊 تحليل باريتو\n"
+        "🔍 تحليل 5 لماذا\n"
+        "📈 مقاييس MTBF و MTTR\n\n"
+        "📝 ما هي المشكلة التي تواجهها؟"
+    )
 
-# ========= RESET =========
 async def reset(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """إعادة تعيين الجلسة"""
     uid = update.effective_user.id
-    if uid in users:
-        del users[uid]
-    await update.message.reply_text("?? Reset done. Send /start to begin again.")
+    delete_user(uid)
+    await update.message.reply_text(
+        "✅ تم إعادة التعيين بنجاح!\n"
+        "أرسل /start لبدء تحليل جديد"
+    )
 
-# ========= HANDLE =========
+async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """عرض حالة المستخدم"""
+    uid = update.effective_user.id
+    user_data = get_user(uid)
+    
+    step = user_data.get("step", 1)
+    problem = user_data.get("problem", "غير محدد")
+    
+    status_text = f"📊 **حالة التحليل**\n\n"
+    status_text += f"📝 المشكلة: {problem}\n"
+    status_text += f"🔢 المرحلة: {step}/7\n"
+    
+    if user_data.get("causes_dict"):
+        total_causes = sum(len(v) for v in user_data["causes_dict"].values())
+        status_text += f"📋 عدد الأسباب المدخلة: {total_causes}\n"
+    
+    if user_data.get("why5_list"):
+        status_text += f"❓ تحليل 5 لماذا: {len(user_data['why5_list'])}/5\n"
+    
+    await update.message.reply_text(status_text, parse_mode='Markdown')
+
+async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """عرض المساعدة"""
+    help_text = """
+🤖 **مساعدة بوت تحليل الجودة**
+
+**الأوامر المتاحة:**
+/start - بدء تحليل جديد
+/reset - إعادة تعيين الجلسة
+/status - عرض حالة التحليل الحالي
+/help - عرض هذه المساعدة
+
+**كيفية الاستخدام:**
+1️⃣ اكتب المشكلة
+2️⃣ اختر القسم
+3️⃣ اختر السبب الرئيسي
+4️⃣ أدخل الأسباب الفرعية مع أرقام (مثال: 'فساد 1')
+5️⃣ استخدم 'NEXT' لتغيير السبب الرئيسي
+6️⃣ استخدم 'FINISH' لإنهاء إدخال الأسباب
+7️⃣ أدخل معطيات التشغيل
+
+**نصائح:**
+• أدخل الأسباب بالصيغة: 'السبب الرقم'
+• يمكنك إدخال عدة أسباب لكل فئة
+• التحليل يعتمد على MTBF و MTTR
+    """
+    await update.message.reply_text(help_text, parse_mode='Markdown')
+
+# ========= معالجة الرسائل =========
 async def handle(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """معالجة الرسائل"""
     uid = update.effective_user.id
     text = update.message.text.strip()
-    if uid not in users:
-        users[uid] = {"step": 1, "causes_dict": {}, "counter": 1, "why5_list": []}
-
-    step = users[uid]["step"]
-
-    # 1?? Problem
-    if step == 1:
-        users[uid]["problem"] = text
-        users[uid]["step"] = 2
-        await update.message.reply_text("?? Department?")
-        return
-
-    # 2?? Department
-    if step == 2:
-        users[uid]["department"] = text
-        users[uid]["step"] = 3
-        keyboard = [
-            ["Method", "Materials"],
-            ["Measurement", "Human"],
-            ["Machine", "Environment"]
-        ]
-        await update.message.reply_text(
-            "Select main cause:",
-            reply_markup=ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
-        )
-        return
-
-    # 3?? Main cause
-    if step == 3:
-        if text not in main_causes:
-            await update.message.reply_text("Choose from buttons")
+    
+    try:
+        user_data = get_user(uid)
+        step = user_data.get("step", 1)
+        
+        # ===== المرحلة 1: المشكلة =====
+        if step == 1:
+            user_data["problem"] = text
+            user_data["step"] = 2
+            save_user(uid, user_data)
+            await update.message.reply_text("🏭 ما هو القسم؟ (مثال: إنتاج، صيانة، جودة)")
             return
-        users[uid]["current_main"] = text
-        if text not in users[uid]["causes_dict"]:
-            users[uid]["causes_dict"][text] = []
-        users[uid]["counter"] = 1
-        users[uid]["step"] = 4
-        await update.message.reply_text(
-            f"1?? Enter causes inside {text}\nNEXT ? other main cause\nFINISH ? end",
-            reply_markup=ReplyKeyboardRemove()
-        )
-        return
-
-    # 4️⃣ Causes input
-    if step == 4:
-        # حدد الكيبورد قبل أي استخدام
-        keyboard = [
-            ["Method", "Materials"],
-            ["Measurement", "Human"],
-            ["Machine", "Environment"]
-    ]
-
-        # إذا المستخدم بغى يبدل السبب الرئيسي
-        if text.lower() == "next":
-            users[uid]["step"] = 3
+        
+        # ===== المرحلة 2: القسم =====
+        if step == 2:
+            user_data["department"] = text
+            user_data["step"] = 3
+            save_user(uid, user_data)
+            
+            keyboard = [[ar] for ar in main_causes_ar]
             await update.message.reply_text(
-                "Select another main cause:",
-    reply_markup=ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
-        )
+                "🔍 اختر السبب الرئيسي:",
+                reply_markup=ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
+            )
             return
-
-        # إذا المستخدم بغى يكمل ويمشي للحسابات
-        if text.lower() == "finish":
-            if len(users[uid]["causes_dict"]) == 0:
-                await update.message.reply_text("Enter at least one cause")
+        
+        # ===== المرحلة 3: السبب الرئيسي =====
+        if step == 3:
+            if text not in main_causes_ar:
+                await update.message.reply_text("❌ الرجاء اختيار سبب من الأزرار")
                 return
-            users[uid]["step"] = 5
-            await update.message.reply_text("Total Operating Time?")
+            
+            main_en = cause_map[text]
+            user_data["current_main"] = main_en
+            if main_en not in user_data["causes_dict"]:
+                user_data["causes_dict"][main_en] = []
+            user_data["counter"] = 1
+            user_data["step"] = 4
+            save_user(uid, user_data)
+            
+            await update.message.reply_text(
+                f"📝 أدخل الأسباب الفرعية لـ {text}\n"
+                f"الصيغة: 'السبب الرقم' (مثال: فساد 1)\n\n"
+                f"🔁 اكتب 'NEXT' لتغيير السبب الرئيسي\n"
+                f"✅ اكتب 'FINISH' لإنهاء الإدخال",
+                reply_markup=ReplyKeyboardRemove()
+            )
             return
-
-        # الآن ناخدو السبب + الرقم
-        main = users[uid]["current_main"]
-        try:
+        
+        # ===== المرحلة 4: إدخال الأسباب =====
+        if step == 4:
+            if text.upper() == "NEXT":
+                user_data["step"] = 3
+                save_user(uid, user_data)
+                keyboard = [[ar] for ar in main_causes_ar]
+                await update.message.reply_text(
+                    "🔄 اختر سبباً رئيسياً آخر:",
+                    reply_markup=ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
+                )
+                return
+            
+            if text.upper() == "FINISH":
+                total_causes = sum(len(v) for v in user_data["causes_dict"].values())
+                if total_causes == 0:
+                    await update.message.reply_text("❌ الرجاء إدخال سبب واحد على الأقل")
+                    return
+                user_data["step"] = 5
+                save_user(uid, user_data)
+                await update.message.reply_text("⏱️ ما هو وقت التشغيل الكلي (بالساعات)؟")
+                return
+            
+            # إضافة سبب جديد
             parts = text.strip().split()
             if len(parts) < 2:
-                await update.message.reply_text(
-                "❌ Enter cause name followed by number, e.g., 'فساد 1'"
-            )
+                await update.message.reply_text("❌ الصيغة خاطئة!\nمثال صحيح: 'فساد 1'")
                 return
+            
             cause_name = " ".join(parts[:-1])
-            cause_value = int(parts[-1])
-
-            # نجمع الرقم فقط في causes_dict
-            users[uid]["causes_dict"][main].append(cause_value)
-            users[uid]["counter"] += 1
-            await update.message.reply_text(f"{users[uid]['counter']} Next cause:")
-
-        except ValueError:
-            await update.message.reply_text(
-            "❌ Last part must be a number, e.g., 'فساد 1'"
-        )
-        return
-    # 5?? Calculations
-    if step == 5:
-        try:
-            if "total" not in users[uid]:
-                users[uid]["total"] = float(text)
-                await update.message.reply_text("Planned Stops?")
-                return
-
-            if "stops" not in users[uid]:
-                users[uid]["stops"] = float(text)
-                await update.message.reply_text("Failures?")
-                return
-
-            if "fail" not in users[uid]:
-                users[uid]["fail"] = float(text)
-                await update.message.reply_text("Repair Time?")
-                return
-
-            if "repair" not in users[uid]:
-                users[uid]["repair"] = float(text)
-
-                aot = users[uid]["total"] - users[uid]["stops"]
-                mttr = users[uid]["repair"] / users[uid]["fail"] if users[uid]["fail"] else 0
-                mtbf = aot / users[uid]["fail"] if users[uid]["fail"] else aot
-                av = mtbf / (mtbf + mttr) * 100 if (mtbf + mttr) != 0 else 0
-
-                # Metrics
-                img1 = metrics_table(aot, mttr, mtbf, av)
-                await update.message.reply_photo(InputFile(img1, "metrics.png"))
-
-                # Pareto Table
-                img2 = pareto_table(users[uid]["causes_dict"])
-                await update.message.reply_photo(InputFile(img2, "pareto.png"))
-
-                # ?? Pareto Chart (??????)
-                img_chart = pareto_chart(users[uid]["causes_dict"])
-                await update.message.reply_photo(InputFile(img_chart, "pareto_chart.png"))
-
-                # 5 Why
-                users[uid]["step"] = 6
-                await update.message.reply_text(f"Why ({users[uid]['problem']})?")
-        except:
-            await update.message.reply_text("Enter numbers only")
-        return
-
-    # 6?? 5 Why
-    if step == 6:
-        users[uid]["why5_list"].append(text)
-        if len(users[uid]["why5_list"]) < 5:
-            await update.message.reply_text(f"Why ({users[uid]['why5_list'][-1]})?")
-        else:
             try:
-            # ========= FINAL PROFESSIONAL ANALYSIS =========
-
-            # Pareto
-                counts = {k: sum(v) for k, v in users[uid]["causes_dict"].items()}
+                cause_value = int(parts[-1])
+            except ValueError:
+                await update.message.reply_text("❌ الرقم يجب أن يكون صحيحاً")
+                return
+            
+            main = user_data["current_main"]
+            user_data["causes_dict"][main].append(cause_value)
+            user_data["counter"] += 1
+            save_user(uid, user_data)
+            
+            await update.message.reply_text(
+                f"✅ تم الإضافة! ({user_data['counter']-1} سبب)\n"
+                f"أدخل السبب التالي، أو 'FINISH' لإنهاء"
+            )
+            return
+        
+        # ===== المرحلة 5: إدخال المعطيات =====
+        if step == 5:
+            if "total" not in user_data:
+                try:
+                    user_data["total"] = float(text)
+                    user_data["step"] = 5.1
+                    save_user(uid, user_data)
+                    await update.message.reply_text("⏸️ ما هو وقت التوقف المخطط (بالساعات)؟")
+                except ValueError:
+                    await update.message.reply_text("❌ الرجاء إدخال رقم صحيح")
+                return
+            
+            if user_data.get("step") == 5.1:
+                try:
+                    user_data["stops"] = float(text)
+                    user_data["step"] = 5.2
+                    save_user(uid, user_data)
+                    await update.message.reply_text("🔧 كم عدد الأعطال؟")
+                except ValueError:
+                    await update.message.reply_text("❌ الرجاء إدخال رقم صحيح")
+                return
+            
+            if user_data.get("step") == 5.2:
+                try:
+                    user_data["fail"] = float(text)
+                    user_data["step"] = 5.3
+                    save_user(uid, user_data)
+                    await update.message.reply_text("🛠️ ما هو وقت الإصلاح الكلي (بالساعات)؟")
+                except ValueError:
+                    await update.message.reply_text("❌ الرجاء إدخال رقم صحيح")
+                return
+            
+            if user_data.get("step") == 5.3:
+                try:
+                    user_data["repair"] = float(text)
+                    
+                    # حساب المعايير
+                    total = user_data["total"]
+                    stops = user_data["stops"]
+                    fail = user_data["fail"]
+                    repair = user_data["repair"]
+                    
+                    aot = total - stops
+                    mttr = repair / fail if fail > 0 else 0
+                    mtbf = aot / fail if fail > 0 else aot
+                    av = mtbf / (mtbf + mttr) * 100 if (mtbf + mttr) > 0 else 0
+                    
+                    # حفظ المعايير
+                    user_data["metrics"] = {"aot": aot, "mttr": mttr, "mtbf": mtbf, "av": av}
+                    
+                    # إرسال الرسوم البيانية
+                    await update.message.reply_text("📊 جاري إنشاء التقارير...")
+                    
+                    img1 = metrics_table(aot, mttr, mtbf, av)
+                    await update.message.reply_photo(img1, caption="📈 **مقاييس الأداء**", parse_mode='Markdown')
+                    
+                    img2 = pareto_table(user_data["causes_dict"])
+                    await update.message.reply_photo(img2, caption="📊 **جدول تحليل باريتو**", parse_mode='Markdown')
+                    
+                    img3 = pareto_chart(user_data["causes_dict"])
+                    await update.message.reply_photo(img3, caption="📉 **مخطط باريتو**", parse_mode='Markdown')
+                    
+                    user_data["step"] = 6
+                    user_data["why5_list"] = []
+                    save_user(uid, user_data)
+                    
+                    await update.message.reply_text(f"🔍 **تحليل 5 لماذا**\n\nلماذا ({user_data['problem']})؟")
+                    
+                except Exception as e:
+                    await update.message.reply_text(f"❌ خطأ: {e}")
+                    user_data["step"] = 5
+                    save_user(uid, user_data)
+                return
+        
+        # ===== المرحلة 6: تحليل 5 لماذا =====
+        if step == 6:
+            user_data["why5_list"].append(text)
+            
+            if len(user_data["why5_list"]) < 5:
+                save_user(uid, user_data)
+                prev_why = user_data["why5_list"][-1]
+                await update.message.reply_text(f"❓ لماذا ({prev_why})؟")
+            else:
+                # تحليل نهائي
+                causes_dict = user_data["causes_dict"]
+                counts = {k: sum(v) for k, v in causes_dict.items()}
                 sorted_items = sorted(counts.items(), key=lambda x: x[1], reverse=True)
                 top_causes = [x[0] for x in sorted_items[:2]]
+                
+                metrics = user_data.get("metrics", {})
+                mtbf = metrics.get("mtbf", 0)
+                mttr = metrics.get("mttr", 0)
+                
+                # تحليل ذكي
+                root_type, root_text = analyze_root_cause(
+                    user_data["why5_list"],
+                    top_causes,
+                    metrics
+                )
+                
+                recommendation = generate_recommendation(root_type, top_causes, metrics)
+                
+                # إرسال جدول 5 لماذا
+                img4 = why5_table(user_data["problem"], user_data["why5_list"])
+                await update.message.reply_photo(img4, caption="🔍 **تحليل 5 لماذا**", parse_mode='Markdown')
+                
+                # تقرير نهائي
+                final_report = f"""
+🎯 **التقرير النهائي لتحليل الجودة**
 
-            # Metrics
-                aot = users[uid]["total"] - users[uid]["stops"]
-                mttr = users[uid]["repair"] / users[uid]["fail"] if users[uid]["fail"] else 0
-                mtbf = aot / users[uid]["fail"] if users[uid]["fail"] else aot
-                av = mtbf / (mtbf + mttr) * 100 if (mtbf + mttr) != 0 else 0
+📝 **المشكلة:** {user_data['problem']}
+🏭 **القسم:** {user_data.get('department', 'غير محدد')}
 
-            # Decision
-                if mtbf < 50 and "Machine" in top_causes:
-                    selected = "Machine"
-                    reason_metrics = "frequent failures (low MTBF)"
-                elif mttr > 3 and "Human" in top_causes:
-                    selected = "Human"
-                    reason_metrics = "high repair time (high MTTR)"
-                else:
-                    selected = top_causes[0]
-                    reason_metrics = "highest impact from Pareto"
+📊 **أهم الأسباب (باريتو):**
+{', '.join(top_causes)}
 
-        # 5 Why (آمن)
-                last_why = users[uid]["why5_list"][-1].lower()
+📈 **المقاييس:**
+• MTBF: {mtbf:.2f} ساعة
+• MTTR: {mttr:.2f} ساعة
+• التوفر: {metrics.get('av', 0):.2f}%
 
-                maintenance_keywords = ["maintenance", "صيانة", "réparation"]
-                human_keywords = ["operator", "human", "worker", "عامل", "مستخدم"]
-                material_keywords = ["material", "materials", "مواد", "matière"]
-                machine_keywords = ["machine", "equipment", "آلة"]
-                management_keywords = ["management", "إدارة"]
+🔍 **السبب الجذري:**
+{recommendation['root']}
 
-                if any(word in last_why for word in maintenance_keywords):
-                    final_cause = "Lack of preventive maintenance program"
+💡 **التوصيات:**
+{recommendation['recommendation']}
 
-                elif any(word in last_why for word in human_keywords):
-                    final_cause = "Insufficient operator training or human error"
+📌 **الإجراءات المقترحة:**
+1. تطبيق التوصيات المذكورة أعلاه
+2. متابعة المؤشرات أسبوعياً
+3. إعادة التقييم بعد 30 يوماً
 
-                elif any(word in last_why for word in material_keywords):
-                    final_cause = "Poor material quality or unsuitable materials"
+✅ تم التحليل بواسطة بوت تحليل الجودة الذكي
+"""
+                
+                await update.message.reply_text(final_report, parse_mode='Markdown')
+                
+                # جدول ملخص الأسباب
+                summary = "📋 **ملخص الأسباب المدخلة:**\n\n"
+                for cause, values in causes_dict.items():
+                    summary += f"• **{cause}**: {len(values)} سبب (القيم: {values})\n"
+                await update.message.reply_text(summary, parse_mode='Markdown')
+                
+                user_data["step"] = 7
+                save_user(uid, user_data)
+                
+                await update.message.reply_text(
+                    "🎉 **اكتمل التحليل!**\n\n"
+                    "لتحليل جديد، أرسل /reset ثم /start"
+                )
+        
+    except Exception as e:
+        await update.message.reply_text(f"❌ حدث خطأ: {e}\nالرجاء المحاولة مرة أخرى أو استخدام /reset")
+        pri
 
-                elif any(word in last_why for word in machine_keywords):
-                    final_cause = "Equipment malfunction due to inadequate maintenance"
-
-                elif any(word in last_why for word in management_keywords):
-                    final_cause = "Ineffective management or lack of supervision"
-
-                elif len(last_why.split()) <= 2:
-                    final_cause = f"Unclear root cause, likely related to {selected} process inefficiency"
-
-                else:
-                    final_cause = f"Root cause identified as: {last_why}"
-                    # ========= SMART RECOMMENDATION (ADVANCED) =========
-
-                lw = last_why.strip().lower()
-
-                if any(word in lw for word in maintenance_keywords):
-                    root_cause = "The issue is driven by an ineffective maintenance strategy impacting system reliability."
-
-                    recommendation = (
-        "It is recommended to transition toward a proactive maintenance approach, "
-        "focusing on preventive planning, scheduling interventions, "
-        "and integrating maintenance into operational priorities."
-    )
-
-                elif any(word in lw for word in human_keywords):
-                    root_cause = "The problem is influenced by human performance variability."
-
-                    recommendation = (
-        "Improving human performance requires structured training programs, "
-        "clear procedures, and continuous performance monitoring."
-    )
-
-                elif any(word in lw for word in material_keywords):
-                    root_cause = "The instability is caused by inconsistencies in material quality."
-
-                    recommendation = (
-        "Strengthening material control through supplier evaluation and quality checks "
-        "is essential to ensure process stability."
-    )
-
-                elif any(word in lw for word in machine_keywords):
-                    root_cause = "Equipment reliability issues are degrading overall system performance."
-
-                    recommendation = (
-        "Implementing predictive maintenance and real-time condition monitoring "
-        "will help reduce failures and improve equipment efficiency."
-    )
-
-                elif any(word in lw for word in management_keywords):
-                    root_cause = "The issue is linked to gaps in management and supervision."
-
-                    recommendation = (
-        "Enhancing management practices through better planning, supervision, "
-        "and performance tracking is necessary."
-    )
-
-                else:
-                    root_cause = f"The root cause is associated with underlying factors related to: {last_why}."
-
-                    recommendation = (
-        "A detailed analysis of this factor is required, followed by corrective actions "
-        "and continuous improvement measures to ensure long-term stability."
-    )
-
-        # ========= FINAL TEXT =========
-                final_text = (
-                    f"🎯 FINAL ROOT CAUSE ANALYSIS\n\n"
-                    f"Top Causes: {', '.join(top_causes)}\n"
-                    f"Selected Cause: {selected}\n"
-                    f"Root Cause: {root_cause}\n\n"
-                    f"Metrics:\n"
-                    f"MTBF: {mtbf:.2f} h\n"
-                    f"MTTR: {mttr:.2f} h\n"
-                    f"Availability: {av:.2f}%\n\n"
-                    f"Conclusion:\n"
-                    f"The main issue is related to {selected} due to {reason_metrics}. "
-                    f"The root cause identified is {root_cause}.\n\nRecommendation:\n{recommendation}"
-        )
-
-                await update.message.reply_text(final_text)
-                users[uid]["step"] = 7
-
-            except Exception as e:
-                await update.message.reply_text(f"Error: {e}")
-            
-
-# ========= RUN =========
-app = ApplicationBuilder().token(TOKEN).build()
-app.add_handler(CommandHandler("start", start))
-app.add_handler(CommandHandler("reset", reset))
-app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle))
-
-print("Eco Analyzer with Pareto Chart Running...")
-app.run_polling()
-
+                     
