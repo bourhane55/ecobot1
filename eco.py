@@ -157,6 +157,142 @@ def why5_table(problem, why_list):
     plt.close()
     return bio
 
+# ========= SMART ROOT CAUSE ANALYSIS =========
+def smart_analysis(causes_dict, metrics, why5_list, problem):
+    """
+    تحليل ذكي احترافي يجمع بين:
+    - Pareto (أهم الأسباب)
+    - MTBF & MTTR (المقاييس)
+    - 5 Why (التحليل العميق)
+    """
+    
+    # 1. Pareto Analysis - identify top causes
+    counts = {k: sum(v) for k, v in causes_dict.items()}
+    sorted_causes = sorted(counts.items(), key=lambda x: x[1], reverse=True)
+    top_causes = [x[0] for x in sorted_causes[:2]] if sorted_causes else ["Unknown"]
+    top_cause = top_causes[0]
+    
+    # 2. Metrics Analysis
+    mtbf = metrics.get('mtbf', 0)
+    mttr = metrics.get('mttr', 0)
+    availability = metrics.get('av', 0)
+    
+    # Determine primary issue based on metrics
+    if mtbf < 50:
+        metrics_issue = "reliability"
+        metrics_root = f"Low MTBF ({mtbf:.1f}h) indicates frequent failures"
+    elif mttr > 3:
+        metrics_issue = "maintainability"
+        metrics_root = f"High MTTR ({mttr:.1f}h) indicates slow repair process"
+    elif availability < 85:
+        metrics_issue = "overall performance"
+        metrics_root = f"Low availability ({availability:.1f}%) indicates combined reliability and maintainability issues"
+    else:
+        metrics_issue = "process"
+        metrics_root = "Metrics within acceptable range, focus on process optimization"
+    
+    # 3. 5 Why Analysis - extract root cause chain
+    why5_chain = why5_list if why5_list else ["No 5 Why analysis completed"]
+    
+    # Analyze keywords in 5 Why responses
+    last_why = why5_list[-1].lower() if why5_list else ""
+    
+    # Keyword mapping for root cause identification
+    keywords = {
+        'maintenance': ['maintenance', 'صيانة', 'repair', 'fix', 'breakdown', 'preventive'],
+        'training': ['training', 'skill', 'competence', 'operator', 'worker', 'عامل', 'تدريب'],
+        'material': ['material', 'supplier', 'quality', 'مواد', 'جودة', 'specification'],
+        'machine': ['machine', 'equipment', 'آلة', 'معدة', 'device', 'asset'],
+        'process': ['process', 'procedure', 'method', 'طريقة', 'إجراء', 'workflow'],
+        'management': ['management', 'supervision', 'leadership', 'إدارة', 'إشراف', 'planning']
+    }
+    
+    detected_categories = []
+    for category, words in keywords.items():
+        if any(word in last_why for word in words):
+            detected_categories.append(category)
+    
+    # 4. Combine all insights to determine root cause
+    if 'maintenance' in detected_categories or metrics_issue == 'reliability':
+        root_cause_type = "maintenance"
+        root_cause = f"The root cause is inadequate maintenance strategy. {metrics_root}. The 5 Why analysis reveals maintenance-related issues: '{last_why[:100]}'"
+        recommendation = """• Implement a preventive maintenance program
+• Schedule regular equipment inspections
+• Develop maintenance checklists and procedures
+• Train maintenance staff on predictive techniques
+• Establish spare parts inventory management
+• Monitor MTBF trends weekly"""
+        
+    elif 'training' in detected_categories or 'human' in top_cause.lower() or metrics_issue == 'maintainability':
+        root_cause_type = "human"
+        root_cause = f"The root cause is insufficient operator skills and training. {metrics_root}. The analysis indicates: '{last_why[:100]}'"
+        recommendation = """• Develop comprehensive training programs
+• Create and document standard operating procedures
+• Implement a mentoring system
+• Conduct regular competency assessments
+• Establish clear work instructions
+• Monitor MTTR trends and training effectiveness"""
+        
+    elif 'material' in detected_categories or 'Materials' in top_cause:
+        root_cause_type = "material"
+        root_cause = f"The root cause is material quality issues. {metrics_root}. The 5 Why analysis reveals: '{last_why[:100]}'"
+        recommendation = """• Evaluate and audit suppliers
+• Implement incoming material inspection
+• Establish material specifications
+• Work with suppliers on quality improvement
+• Implement traceability system
+• Monitor defect rates by supplier"""
+        
+    elif 'machine' in detected_categories or 'Machine' in top_cause:
+        root_cause_type = "machine"
+        root_cause = f"The root cause is equipment degradation. {metrics_root}. The analysis shows: '{last_why[:100]}'"
+        recommendation = """• Implement predictive maintenance
+• Upgrade critical equipment
+• Monitor equipment condition in real-time
+• Establish equipment replacement strategy
+• Implement condition-based monitoring
+• Track MTBF by equipment type"""
+        
+    elif 'process' in detected_categories or 'Method' in top_cause:
+        root_cause_type = "process"
+        root_cause = f"The root cause is process inefficiency. {metrics_root}. The analysis indicates: '{last_why[:100]}'"
+        recommendation = """• Map and analyze current process
+• Identify bottlenecks and waste
+• Implement process improvements
+• Standardize work methods
+• Conduct time and motion studies
+• Monitor process KPIs"""
+        
+    elif 'management' in detected_categories:
+        root_cause_type = "management"
+        root_cause = f"The root cause is management system gaps. {metrics_root}. The analysis reveals: '{last_why[:100]}'"
+        recommendation = """• Implement performance management system
+• Establish clear roles and responsibilities
+• Conduct regular management reviews
+• Improve communication channels
+• Define and track KPIs
+• Implement continuous improvement culture"""
+        
+    else:
+        root_cause_type = "combined"
+        root_cause = f"The root cause involves multiple factors. Primary factor: {top_cause}. {metrics_root}. Key insight: '{last_why[:100]}'"
+        recommendation = f"""• Focus improvement on {top_cause} related processes
+• Conduct detailed analysis of contributing factors
+• Implement corrective actions based on findings
+• Monitor all identified metrics
+• Establish regular review meetings
+• Document lessons learned"""
+    
+    # 5. Add specific metrics-driven insights
+    if mtbf < 50:
+        root_cause += f" Critical reliability issue: MTBF is {mtbf:.1f}h (target >100h)."
+    if mttr > 3:
+        root_cause += f" Maintainability concern: MTTR is {mttr:.1f}h (target <2h)."
+    if availability < 85:
+        root_cause += f" Overall performance impacted: Availability at {availability:.1f}% (target >95%)."
+    
+    return root_cause, recommendation, top_causes
+
 # ========= BOT COMMANDS =========
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     uid = update.effective_user.id
@@ -174,7 +310,8 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "I will help you analyze quality problems using:\n"
         "📊 Pareto Analysis\n"
         "🔍 5 Why Analysis\n"
-        "📈 MTBF & MTTR Metrics\n\n"
+        "📈 MTBF & MTTR Metrics\n"
+        "🧠 Smart Root Cause Analysis\n\n"
         "📝 What is the problem you are facing?"
     )
 
@@ -326,13 +463,11 @@ async def handle(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
             return
         
-        # Step 5: Operating parameters (MODIFIED SECTION)
+        # Step 5: Operating parameters
         if step == 5:
-            # Initialize step_5_sub if not exists
             if "step_5_sub" not in user_data:
                 user_data["step_5_sub"] = 0
             
-            # Step 5.0: Total operating time
             if user_data["step_5_sub"] == 0:
                 try:
                     clean_text = text.replace(',', '.').strip()
@@ -341,10 +476,9 @@ async def handle(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     save_user(uid, user_data)
                     await update.message.reply_text("⏸️ What is the planned stop time (in hours)?")
                 except ValueError:
-                    await update.message.reply_text("❌ Please enter a valid number (example: 100 or 100.5)")
+                    await update.message.reply_text("❌ Please enter a valid number")
                 return
             
-            # Step 5.1: Planned stops
             if user_data["step_5_sub"] == 1:
                 try:
                     clean_text = text.replace(',', '.').strip()
@@ -356,7 +490,6 @@ async def handle(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     await update.message.reply_text("❌ Please enter a valid number")
                 return
             
-            # Step 5.2: Number of failures
             if user_data["step_5_sub"] == 2:
                 try:
                     clean_text = text.replace(',', '.').strip()
@@ -368,7 +501,6 @@ async def handle(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     await update.message.reply_text("❌ Please enter a valid number")
                 return
             
-            # Step 5.3: Total repair time
             if user_data["step_5_sub"] == 3:
                 try:
                     clean_text = text.replace(',', '.').strip()
@@ -384,136 +516,4 @@ async def handle(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     mtbf = aot / fail if fail > 0 else aot
                     av = mtbf / (mtbf + mttr) * 100 if (mtbf + mttr) > 0 else 0
                     
-                    user_data["metrics"] = {"aot": aot, "mttr": mttr, "mtbf": mtbf, "av": av}
-                    
-                    await update.message.reply_text("📊 Generating reports...")
-                    
-                    img1 = metrics_table(aot, mttr, mtbf, av)
-                    await update.message.reply_photo(img1, caption="📈 **Performance Metrics**", parse_mode='Markdown')
-                    
-                    img2 = pareto_table(user_data["causes_dict"])
-                    await update.message.reply_photo(img2, caption="📊 **Pareto Analysis Table**", parse_mode='Markdown')
-                    
-                    img3 = pareto_chart(user_data["causes_dict"])
-                    await update.message.reply_photo(img3, caption="📉 **Pareto Chart**", parse_mode='Markdown')
-                    
-                    # Clear step 5 variables
-                    del user_data["step_5_sub"]
-                    user_data["step"] = 6
-                    user_data["why5_list"] = []
-                    save_user(uid, user_data)
-                    
-                    await update.message.reply_text(f"🔍 **5 Why Analysis**\n\nWhy ({user_data['problem']})?")
-                    
-                except Exception as e:
-                    await update.message.reply_text(f"❌ Error: {e}")
-                    # Reset to beginning of step 5
-                    user_data["step_5_sub"] = 0
-                    save_user(uid, user_data)
-                return
-        
-        # Step 6: 5 Why Analysis
-        if step == 6:
-            user_data["why5_list"].append(text)
-            
-            if len(user_data["why5_list"]) < 5:
-                save_user(uid, user_data)
-                prev_why = user_data["why5_list"][-1]
-                await update.message.reply_text(f"❓ Why ({prev_why})?")
-            else:
-                causes_dict = user_data["causes_dict"]
-                counts = {k: sum(v) for k, v in causes_dict.items()}
-                sorted_items = sorted(counts.items(), key=lambda x: x[1], reverse=True)
-                top_causes = [x[0] for x in sorted_items[:2]]
-                
-                metrics = user_data.get("metrics", {})
-                mtbf = metrics.get("mtbf", 0)
-                mttr = metrics.get("mttr", 0)
-                
-                last_why = user_data["why5_list"][-1].lower() if user_data["why5_list"] else ""
-                
-                maintenance_keywords = ["maintenance", "صيانة", "réparation"]
-                human_keywords = ["operator", "human", "worker", "عامل", "مستخدم", "training"]
-                material_keywords = ["material", "materials", "مواد", "matière", "quality"]
-                machine_keywords = ["machine", "equipment", "آلة", "device"]
-                management_keywords = ["management", "إدارة", "supervision"]
-                
-                if any(word in last_why for word in maintenance_keywords):
-                    root_cause = "Lack of preventive maintenance program"
-                    recommendation = "Implement preventive maintenance system, schedule regular inspections"
-                elif any(word in last_why for word in human_keywords):
-                    root_cause = "Insufficient skills or human error"
-                    recommendation = "Provide intensive training programs, document procedures"
-                elif any(word in last_why for word in material_keywords):
-                    root_cause = "Poor material quality or non-conforming materials"
-                    recommendation = "Evaluate suppliers, inspect incoming materials"
-                elif any(word in last_why for word in machine_keywords):
-                    root_cause = "Frequent equipment failures"
-                    recommendation = "Implement predictive maintenance, upgrade old equipment"
-                elif any(word in last_why for word in management_keywords):
-                    root_cause = "Weak management and supervision"
-                    recommendation = "Improve monitoring system, define KPIs"
-                else:
-                    root_cause = f"Multiple factors: {top_causes[0] if top_causes else 'Unknown'}"
-                    recommendation = "Detailed analysis of identified causes, implement corrective actions"
-                
-                img4 = why5_table(user_data["problem"], user_data["why5_list"])
-                await update.message.reply_photo(img4, caption="🔍 **5 Why Analysis**", parse_mode='Markdown')
-                
-                final_report = f"""
-🎯 **Final Quality Analysis Report**
-
-📝 **Problem:** {user_data['problem']}
-🏭 **Department:** {user_data.get('department', 'Not specified')}
-
-📊 **Top Causes (Pareto):**
-{', '.join(top_causes)}
-
-📈 **Metrics:**
-• MTBF: {mtbf:.2f} hours
-• MTTR: {mttr:.2f} hours
-• Availability: {metrics.get('av', 0):.2f}%
-
-🔍 **Root Cause:**
-{root_cause}
-
-💡 **Recommendations:**
-{recommendation}
-
-✅ Analysis completed by Quality Analysis Bot
-"""
-                
-                await update.message.reply_text(final_report, parse_mode='Markdown')
-                
-                summary = "📋 **Summary of Entered Causes:**\n\n"
-                for cause, values in causes_dict.items():
-                    summary += f"• **{cause}**: {len(values)} cause(s) (values: {values})\n"
-                await update.message.reply_text(summary, parse_mode='Markdown')
-                
-                user_data["step"] = 7
-                save_user(uid, user_data)
-                
-                await update.message.reply_text(
-                    "🎉 **Analysis Completed!**\n\n"
-                    "For a new analysis, send /reset then /start"
-                )
-        
-    except Exception as e:
-        await update.message.reply_text(f"❌ Error: {e}\nPlease try again or use /reset")
-        print(f"Error: {e}")
-
-# ========= RUN BOT =========
-def main():
-    app = ApplicationBuilder().token(TOKEN).build()
-    
-    app.add_handler(CommandHandler("start", start))
-    app.add_handler(CommandHandler("reset", reset))
-    app.add_handler(CommandHandler("status", status))
-    app.add_handler(CommandHandler("help", help_command))
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle))
-    
-    print("Bot is running...")
-    app.run_polling()
-
-if __name__ == "__main__":
-    main()
+              
