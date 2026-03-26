@@ -7,7 +7,7 @@ import os
 from datetime import datetime
 
 # ========= الإعدادات =========
-TOKEN = '8299170161:AAH0RuCnLkaBuOL1N-uSBvBxD6FxyO6XYt4'
+TOKEN = '8299170161:AAHCsVWMp4aiGGTj_R9O2iaL7NmYPWWoT_s'
 DATA_FILE = 'user_data.json'
 
 # ========= إدارة البيانات =========
