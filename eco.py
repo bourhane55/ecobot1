@@ -1,5 +1,7 @@
 from telegram import Update, ReplyKeyboardMarkup, ReplyKeyboardRemove
 from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, ContextTypes, filters
+import matplotlib
+matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import io
 import json
@@ -7,7 +9,7 @@ import os
 from datetime import datetime
 
 # ========= SETTINGS =========
-TOKEN = '8299170161:AAH0RuCnLkaBuOL1N-uSBvBxD6FxyO6XYt4'
+TOKEN = '8299170161:AAHCsVWMp4aiGGTj_R9O2iaL7NmYPWWoT_s'
 DATA_FILE = 'user_data.json'
 
 # ========= DATA MANAGEMENT =========
@@ -25,8 +27,6 @@ users = load_data()
 
 # ========= CONSTANTS =========
 main_causes = ["Method", "Materials", "Measurement", "Human", "Machine", "Environment"]
-main_causes_ar = ["الطريقة", "المواد", "القياس", "العامل", "الآلة", "البيئة"]
-cause_map = dict(zip(main_causes_ar, main_causes))
 
 # ========= HELPER FUNCTIONS =========
 def get_user(uid):
@@ -37,7 +37,6 @@ def get_user(uid):
             "causes_dict": {},
             "counter": 1,
             "why5_list": [],
-            "language": "ar",
             "created_at": datetime.now().isoformat()
         }
         save_data(users)
@@ -58,18 +57,18 @@ def metrics_table(aot, mttr, mtbf, av):
     fig, ax = plt.subplots(figsize=(8, 4))
     ax.axis('off')
     
-    mtbf_note = "✅ جيد" if mtbf >= 100 else "⚠️ منخفض"
-    mttr_note = "✅ جيد" if mttr <= 2 else "⚠️ مرتفع"
-    av_note = "✅ ممتاز" if av >= 95 else "⚠️ متوسط" if av >= 85 else "❌ منخفض"
+    mtbf_note = "✅ Good" if mtbf >= 100 else "⚠️ Low"
+    mttr_note = "✅ Good" if mttr <= 2 else "⚠️ High"
+    av_note = "✅ Excellent" if av >= 95 else "⚠️ Average" if av >= 85 else "❌ Low"
     
     data = [
-        ["وقت التشغيل الفعلي", f"{aot:.2f} ساعة", ""],
-        ["MTTR (متوسط وقت الإصلاح)", f"{mttr:.2f} ساعة", mttr_note],
-        ["MTBF (متوسط الوقت بين الأعطال)", f"{mtbf:.2f} ساعة", mtbf_note],
-        ["التوفر", f"{av:.2f} %", av_note]
+        ["Actual Operating Time", f"{aot:.2f} h", ""],
+        ["MTTR (Mean Time To Repair)", f"{mttr:.2f} h", mttr_note],
+        ["MTBF (Mean Time Between Failures)", f"{mtbf:.2f} h", mtbf_note],
+        ["Availability", f"{av:.2f} %", av_note]
     ]
     
-    table = ax.table(cellText=data, colLabels=["المقياس", "القيمة", "الملاحظة"], loc="center")
+    table = ax.table(cellText=data, colLabels=["Metric", "Value", "Observation"], loc="center")
     table.scale(1, 2)
     table.auto_set_font_size(False)
     table.set_fontsize(10)
@@ -95,7 +94,7 @@ def pareto_table(causes_dict):
     fig, ax = plt.subplots(figsize=(10, len(rows)*0.5+2))
     ax.axis('off')
     
-    table = ax.table(cellText=rows, colLabels=["السبب الرئيسي", "العدد", "النسبة", "النسبة التراكمية"], loc="center")
+    table = ax.table(cellText=rows, colLabels=["Main Cause", "Count", "%", "Cumulative %"], loc="center")
     table.scale(1, 2)
     table.auto_set_font_size(False)
     table.set_fontsize(10)
@@ -124,16 +123,16 @@ def pareto_chart(causes_dict):
     
     percent_values = [(v / total) * 100 if total != 0 else 0 for v in values]
     bars = ax1.bar(labels, percent_values, color='steelblue', alpha=0.7)
-    ax1.set_ylabel("النسبة المئوية (%)", fontsize=12)
+    ax1.set_ylabel("Percentage (%)", fontsize=12)
     ax1.tick_params(axis='x', rotation=45)
     
     ax2 = ax1.twinx()
     ax2.plot(labels, cumulative, marker='o', color='red', linewidth=2, markersize=8)
-    ax2.set_ylabel("النسبة التراكمية (%)", fontsize=12)
+    ax2.set_ylabel("Cumulative %", fontsize=12)
     ax2.set_ylim(0, 105)
-    ax2.axhline(80, linestyle='--', color='gray', alpha=0.7, label='خط 80%')
+    ax2.axhline(80, linestyle='--', color='gray', alpha=0.7, label='80% Line')
     
-    plt.title("مخطط باريتو - تحليل الأسباب", fontsize=14, pad=20)
+    plt.title("Pareto Chart - Cause Analysis", fontsize=14, pad=20)
     plt.tight_layout()
     
     bio = io.BytesIO()
@@ -146,8 +145,8 @@ def why5_table(problem, why_list):
     fig, ax = plt.subplots(figsize=(10, len(why_list)*0.8+2))
     ax.axis('off')
     
-    rows = [[f"لماذا {i+1}", why] for i, why in enumerate(why_list)]
-    table = ax.table(cellText=rows, colLabels=["المستوى", f"تحليل المشكلة: {problem}"], loc="center")
+    rows = [[f"Why {i+1}", why] for i, why in enumerate(why_list)]
+    table = ax.table(cellText=rows, colLabels=["Level", f"5 Why Analysis: {problem}"], loc="center")
     table.scale(1, 2)
     table.auto_set_font_size(False)
     table.set_fontsize(10)
@@ -169,20 +168,20 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     save_user(uid, user_data)
     
     await update.message.reply_text(
-        "مرحباً بك في بوت تحليل الجودة المتطور! 🤖\n\n"
-        "سأساعدك في تحليل مشكلات الجودة باستخدام:\n"
-        "📊 تحليل باريتو\n"
-        "🔍 تحليل 5 لماذا\n"
-        "📈 مقاييس MTBF و MTTR\n\n"
-        "📝 ما هي المشكلة التي تواجهها؟"
+        "Welcome to the Advanced Quality Analysis Bot! 🤖\n\n"
+        "I will help you analyze quality problems using:\n"
+        "📊 Pareto Analysis\n"
+        "🔍 5 Why Analysis\n"
+        "📈 MTBF & MTTR Metrics\n\n"
+        "📝 What is the problem you are facing?"
     )
 
 async def reset(update: Update, context: ContextTypes.DEFAULT_TYPE):
     uid = update.effective_user.id
     delete_user(uid)
     await update.message.reply_text(
-        "✅ تم إعادة التعيين بنجاح!\n"
-        "أرسل /start لبدء تحليل جديد"
+        "✅ Reset completed successfully!\n"
+        "Send /start to begin a new analysis"
     )
 
 async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -190,39 +189,39 @@ async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_data = get_user(uid)
     
     step = user_data.get("step", 1)
-    problem = user_data.get("problem", "غير محدد")
+    problem = user_data.get("problem", "Not set")
     
-    status_text = f"📊 **حالة التحليل**\n\n"
-    status_text += f"📝 المشكلة: {problem}\n"
-    status_text += f"🔢 المرحلة: {step}/7\n"
+    status_text = f"📊 **Analysis Status**\n\n"
+    status_text += f"📝 Problem: {problem}\n"
+    status_text += f"🔢 Step: {step}/7\n"
     
     if user_data.get("causes_dict"):
         total_causes = sum(len(v) for v in user_data["causes_dict"].values())
-        status_text += f"📋 عدد الأسباب المدخلة: {total_causes}\n"
+        status_text += f"📋 Causes entered: {total_causes}\n"
     
     if user_data.get("why5_list"):
-        status_text += f"❓ تحليل 5 لماذا: {len(user_data['why5_list'])}/5\n"
+        status_text += f"❓ 5 Why Analysis: {len(user_data['why5_list'])}/5\n"
     
     await update.message.reply_text(status_text, parse_mode='Markdown')
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     help_text = """
-🤖 **مساعدة بوت تحليل الجودة**
+🤖 **Quality Analysis Bot Help**
 
-**الأوامر المتاحة:**
-/start - بدء تحليل جديد
-/reset - إعادة تعيين الجلسة
-/status - عرض حالة التحليل الحالي
-/help - عرض هذه المساعدة
+**Available Commands:**
+/start - Start a new analysis
+/reset - Reset current session
+/status - Show current analysis status
+/help - Show this help message
 
-**كيفية الاستخدام:**
-1️⃣ اكتب المشكلة
-2️⃣ اختر القسم
-3️⃣ اختر السبب الرئيسي
-4️⃣ أدخل الأسباب الفرعية مع أرقام (مثال: 'فساد 1')
-5️⃣ استخدم 'NEXT' لتغيير السبب الرئيسي
-6️⃣ استخدم 'FINISH' لإنهاء إدخال الأسباب
-7️⃣ أدخل معطيات التشغيل
+**How to Use:**
+1️⃣ Enter the problem
+2️⃣ Enter the department
+3️⃣ Select the main cause
+4️⃣ Enter sub-causes with numbers (example: 'corrosion 1')
+5️⃣ Use 'NEXT' to change main cause
+6️⃣ Use 'FINISH' to finish entering causes
+7️⃣ Enter operating parameters
     """
     await update.message.reply_text(help_text, parse_mode='Markdown')
 
@@ -235,54 +234,57 @@ async def handle(update: Update, context: ContextTypes.DEFAULT_TYPE):
         user_data = get_user(uid)
         step = user_data.get("step", 1)
         
+        # Step 1: Problem
         if step == 1:
             user_data["problem"] = text
             user_data["step"] = 2
             save_user(uid, user_data)
-            await update.message.reply_text("🏭 ما هو القسم؟ (مثال: إنتاج، صيانة، جودة)")
+            await update.message.reply_text("🏭 What is the department? (e.g., Production, Maintenance, Quality)")
             return
         
+        # Step 2: Department
         if step == 2:
             user_data["department"] = text
             user_data["step"] = 3
             save_user(uid, user_data)
             
-            keyboard = [[ar] for ar in main_causes_ar]
+            keyboard = [[cause] for cause in main_causes]
             await update.message.reply_text(
-                "🔍 اختر السبب الرئيسي:",
+                "🔍 Select the main cause:",
                 reply_markup=ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
             )
             return
         
+        # Step 3: Main cause selection
         if step == 3:
-            if text not in main_causes_ar:
-                await update.message.reply_text("❌ الرجاء اختيار سبب من الأزرار")
+            if text not in main_causes:
+                await update.message.reply_text("❌ Please choose a cause from the buttons")
                 return
             
-            main_en = cause_map[text]
-            user_data["current_main"] = main_en
-            if main_en not in user_data["causes_dict"]:
-                user_data["causes_dict"][main_en] = []
+            user_data["current_main"] = text
+            if text not in user_data["causes_dict"]:
+                user_data["causes_dict"][text] = []
             user_data["counter"] = 1
             user_data["step"] = 4
             save_user(uid, user_data)
             
             await update.message.reply_text(
-                f"📝 أدخل الأسباب الفرعية لـ {text}\n"
-                f"الصيغة: 'السبب الرقم' (مثال: فساد 1)\n\n"
-                f"🔁 اكتب 'NEXT' لتغيير السبب الرئيسي\n"
-                f"✅ اكتب 'FINISH' لإنهاء الإدخال",
+                f"📝 Enter sub-causes for {text}\n"
+                f"Format: 'cause number' (example: corrosion 1)\n\n"
+                f"🔁 Type 'NEXT' to change main cause\n"
+                f"✅ Type 'FINISH' to finish input",
                 reply_markup=ReplyKeyboardRemove()
             )
             return
         
+        # Step 4: Sub-causes input
         if step == 4:
             if text.upper() == "NEXT":
                 user_data["step"] = 3
                 save_user(uid, user_data)
-                keyboard = [[ar] for ar in main_causes_ar]
+                keyboard = [[cause] for cause in main_causes]
                 await update.message.reply_text(
-                    "🔄 اختر سبباً رئيسياً آخر:",
+                    "🔄 Select another main cause:",
                     reply_markup=ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
                 )
                 return
@@ -290,23 +292,23 @@ async def handle(update: Update, context: ContextTypes.DEFAULT_TYPE):
             if text.upper() == "FINISH":
                 total_causes = sum(len(v) for v in user_data["causes_dict"].values())
                 if total_causes == 0:
-                    await update.message.reply_text("❌ الرجاء إدخال سبب واحد على الأقل")
+                    await update.message.reply_text("❌ Please enter at least one cause")
                     return
                 user_data["step"] = 5
                 save_user(uid, user_data)
-                await update.message.reply_text("⏱️ ما هو وقت التشغيل الكلي (بالساعات)؟")
+                await update.message.reply_text("⏱️ What is the total operating time (in hours)?")
                 return
             
             parts = text.strip().split()
             if len(parts) < 2:
-                await update.message.reply_text("❌ الصيغة خاطئة!\nمثال صحيح: 'فساد 1'")
+                await update.message.reply_text("❌ Wrong format!\nCorrect example: 'corrosion 1'")
                 return
             
             cause_name = " ".join(parts[:-1])
             try:
                 cause_value = int(parts[-1])
             except ValueError:
-                await update.message.reply_text("❌ الرقم يجب أن يكون صحيحاً")
+                await update.message.reply_text("❌ The last part must be a number")
                 return
             
             main = user_data["current_main"]
@@ -315,45 +317,54 @@ async def handle(update: Update, context: ContextTypes.DEFAULT_TYPE):
             save_user(uid, user_data)
             
             await update.message.reply_text(
-                f"✅ تم الإضافة! ({user_data['counter']-1} سبب)\n"
-                f"أدخل السبب التالي، أو 'FINISH' لإنهاء"
+                f"✅ Added! ({user_data['counter']-1} cause(s))\n"
+                f"Enter next cause, or 'FINISH' to finish"
             )
             return
         
+        # Step 5: Operating parameters
         if step == 5:
+            # Step 5.0: Total operating time
             if "total" not in user_data:
                 try:
-                    user_data["total"] = float(text)
+                    clean_text = text.replace(',', '.').strip()
+                    user_data["total"] = float(clean_text)
                     user_data["step"] = 5.1
                     save_user(uid, user_data)
-                    await update.message.reply_text("⏸️ ما هو وقت التوقف المخطط (بالساعات)؟")
+                    await update.message.reply_text("⏸️ What is the planned stop time (in hours)?")
                 except ValueError:
-                    await update.message.reply_text("❌ الرجاء إدخال رقم صحيح")
+                    await update.message.reply_text("❌ Please enter a valid number (example: 100 or 100.5)")
                 return
             
-            if user_data.get("step") == 5.1:
+            # Step 5.1: Planned stops
+            if "stops" not in user_data:
                 try:
-                    user_data["stops"] = float(text)
+                    clean_text = text.replace(',', '.').strip()
+                    user_data["stops"] = float(clean_text)
                     user_data["step"] = 5.2
                     save_user(uid, user_data)
-                    await update.message.reply_text("🔧 كم عدد الأعطال؟")
+                    await update.message.reply_text("🔧 How many failures?")
                 except ValueError:
-                    await update.message.reply_text("❌ الرجاء إدخال رقم صحيح")
+                    await update.message.reply_text("❌ Please enter a valid number")
                 return
             
-            if user_data.get("step") == 5.2:
+            # Step 5.2: Number of failures
+            if "fail" not in user_data:
                 try:
-                    user_data["fail"] = float(text)
+                    clean_text = text.replace(',', '.').strip()
+                    user_data["fail"] = float(clean_text)
                     user_data["step"] = 5.3
                     save_user(uid, user_data)
-                    await update.message.reply_text("🛠️ ما هو وقت الإصلاح الكلي (بالساعات)؟")
+                    await update.message.reply_text("🛠️ What is the total repair time (in hours)?")
                 except ValueError:
-                    await update.message.reply_text("❌ الرجاء إدخال رقم صحيح")
+                    await update.message.reply_text("❌ Please enter a valid number")
                 return
             
-            if user_data.get("step") == 5.3:
+            # Step 5.3: Total repair time
+            if "repair" not in user_data:
                 try:
-                    user_data["repair"] = float(text)
+                    clean_text = text.replace(',', '.').strip()
+                    user_data["repair"] = float(clean_text)
                     
                     total = user_data["total"]
                     stops = user_data["stops"]
@@ -367,36 +378,37 @@ async def handle(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     
                     user_data["metrics"] = {"aot": aot, "mttr": mttr, "mtbf": mtbf, "av": av}
                     
-                    await update.message.reply_text("📊 جاري إنشاء التقارير...")
+                    await update.message.reply_text("📊 Generating reports...")
                     
                     img1 = metrics_table(aot, mttr, mtbf, av)
-                    await update.message.reply_photo(img1, caption="📈 **مقاييس الأداء**", parse_mode='Markdown')
+                    await update.message.reply_photo(img1, caption="📈 **Performance Metrics**", parse_mode='Markdown')
                     
                     img2 = pareto_table(user_data["causes_dict"])
-                    await update.message.reply_photo(img2, caption="📊 **جدول تحليل باريتو**", parse_mode='Markdown')
+                    await update.message.reply_photo(img2, caption="📊 **Pareto Analysis Table**", parse_mode='Markdown')
                     
                     img3 = pareto_chart(user_data["causes_dict"])
-                    await update.message.reply_photo(img3, caption="📉 **مخطط باريتو**", parse_mode='Markdown')
+                    await update.message.reply_photo(img3, caption="📉 **Pareto Chart**", parse_mode='Markdown')
                     
                     user_data["step"] = 6
                     user_data["why5_list"] = []
                     save_user(uid, user_data)
                     
-                    await update.message.reply_text(f"🔍 **تحليل 5 لماذا**\n\nلماذا ({user_data['problem']})?")
+                    await update.message.reply_text(f"🔍 **5 Why Analysis**\n\nWhy ({user_data['problem']})?")
                     
                 except Exception as e:
-                    await update.message.reply_text(f"❌ خطأ: {e}")
+                    await update.message.reply_text(f"❌ Error: {e}")
                     user_data["step"] = 5
                     save_user(uid, user_data)
                 return
         
+        # Step 6: 5 Why Analysis
         if step == 6:
             user_data["why5_list"].append(text)
             
             if len(user_data["why5_list"]) < 5:
                 save_user(uid, user_data)
                 prev_why = user_data["why5_list"][-1]
-                await update.message.reply_text(f"❓ لماذا ({prev_why})?")
+                await update.message.reply_text(f"❓ Why ({prev_why})?")
             else:
                 causes_dict = user_data["causes_dict"]
                 counts = {k: sum(v) for k, v in causes_dict.items()}
@@ -410,73 +422,73 @@ async def handle(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 last_why = user_data["why5_list"][-1].lower() if user_data["why5_list"] else ""
                 
                 maintenance_keywords = ["maintenance", "صيانة", "réparation"]
-                human_keywords = ["operator", "human", "worker", "عامل", "مستخدم"]
-                material_keywords = ["material", "materials", "مواد", "matière"]
-                machine_keywords = ["machine", "equipment", "آلة"]
-                management_keywords = ["management", "إدارة"]
+                human_keywords = ["operator", "human", "worker", "عامل", "مستخدم", "training"]
+                material_keywords = ["material", "materials", "مواد", "matière", "quality"]
+                machine_keywords = ["machine", "equipment", "آلة", "device"]
+                management_keywords = ["management", "إدارة", "supervision"]
                 
                 if any(word in last_why for word in maintenance_keywords):
-                    root_cause = "ضعف برنامج الصيانة الوقائية"
-                    recommendation = "تطبيق نظام صيانة وقائية، جدولة الأعمال الدورية"
+                    root_cause = "Lack of preventive maintenance program"
+                    recommendation = "Implement preventive maintenance system, schedule regular inspections"
                 elif any(word in last_why for word in human_keywords):
-                    root_cause = "ضعف المهارات أو الأخطاء البشرية"
-                    recommendation = "برامج تدريب مكثفة، توثيق الإجراءات"
+                    root_cause = "Insufficient skills or human error"
+                    recommendation = "Provide intensive training programs, document procedures"
                 elif any(word in last_why for word in material_keywords):
-                    root_cause = "جودة المواد غير مطابقة"
-                    recommendation = "تقييم الموردين، فحص المواد الواردة"
+                    root_cause = "Poor material quality or non-conforming materials"
+                    recommendation = "Evaluate suppliers, inspect incoming materials"
                 elif any(word in last_why for word in machine_keywords):
-                    root_cause = "أعطال متكررة في المعدات"
-                    recommendation = "تطبيق الصيانة التنبؤية، تحديث المعدات"
+                    root_cause = "Frequent equipment failures"
+                    recommendation = "Implement predictive maintenance, upgrade old equipment"
                 elif any(word in last_why for word in management_keywords):
-                    root_cause = "ضعف الإدارة والإشراف"
-                    recommendation = "تحسين نظام المتابعة، تحديد مؤشرات الأداء"
+                    root_cause = "Weak management and supervision"
+                    recommendation = "Improve monitoring system, define KPIs"
                 else:
-                    root_cause = f"عوامل متعددة: {top_causes[0] if top_causes else 'غير محدد'}"
-                    recommendation = "تحليل مفصل للأسباب المحددة، تطبيق إجراءات تصحيحية"
+                    root_cause = f"Multiple factors: {top_causes[0] if top_causes else 'Unknown'}"
+                    recommendation = "Detailed analysis of identified causes, implement corrective actions"
                 
                 img4 = why5_table(user_data["problem"], user_data["why5_list"])
-                await update.message.reply_photo(img4, caption="🔍 **تحليل 5 لماذا**", parse_mode='Markdown')
+                await update.message.reply_photo(img4, caption="🔍 **5 Why Analysis**", parse_mode='Markdown')
                 
                 final_report = f"""
-🎯 **التقرير النهائي لتحليل الجودة**
+🎯 **Final Quality Analysis Report**
 
-📝 **المشكلة:** {user_data['problem']}
-🏭 **القسم:** {user_data.get('department', 'غير محدد')}
+📝 **Problem:** {user_data['problem']}
+🏭 **Department:** {user_data.get('department', 'Not specified')}
 
-📊 **أهم الأسباب (باريتو):**
+📊 **Top Causes (Pareto):**
 {', '.join(top_causes)}
 
-📈 **المقاييس:**
-• MTBF: {mtbf:.2f} ساعة
-• MTTR: {mttr:.2f} ساعة
-• التوفر: {metrics.get('av', 0):.2f}%
+📈 **Metrics:**
+• MTBF: {mtbf:.2f} hours
+• MTTR: {mttr:.2f} hours
+• Availability: {metrics.get('av', 0):.2f}%
 
-🔍 **السبب الجذري:**
+🔍 **Root Cause:**
 {root_cause}
 
-💡 **التوصيات:**
+💡 **Recommendations:**
 {recommendation}
 
-✅ تم التحليل بواسطة بوت تحليل الجودة الذكي
+✅ Analysis completed by Quality Analysis Bot
 """
                 
                 await update.message.reply_text(final_report, parse_mode='Markdown')
                 
-                summary = "📋 **ملخص الأسباب المدخلة:**\n\n"
+                summary = "📋 **Summary of Entered Causes:**\n\n"
                 for cause, values in causes_dict.items():
-                    summary += f"• **{cause}**: {len(values)} سبب (القيم: {values})\n"
+                    summary += f"• **{cause}**: {len(values)} cause(s) (values: {values})\n"
                 await update.message.reply_text(summary, parse_mode='Markdown')
                 
                 user_data["step"] = 7
                 save_user(uid, user_data)
                 
                 await update.message.reply_text(
-                    "🎉 **اكتمل التحليل!**\n\n"
-                    "لتحليل جديد، أرسل /reset ثم /start"
+                    "🎉 **Analysis Completed!**\n\n"
+                    "For a new analysis, send /reset then /start"
                 )
         
     except Exception as e:
-        await update.message.reply_text(f"❌ حدث خطأ: {e}\nالرجاء المحاولة مرة أخرى أو استخدام /reset")
+        await update.message.reply_text(f"❌ Error: {e}\nPlease try again or use /reset")
         print(f"Error: {e}")
 
 # ========= RUN BOT =========
