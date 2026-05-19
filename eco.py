@@ -466,4 +466,392 @@ def handle_message(chat_id, text):
                 send_keyboard(chat_id, "🔄 اختر سبباً رئيسياً آخر:", main_causes_ar)
             else:
                 send_keyboard(chat_id, "🔄 Select another main cause:", main_causes)
-         
+            return ""
+
+        if text.upper() == "FINISH":
+            total_causes = sum(len(v) for v in user_data["causes_dict"].values())
+            if total_causes == 0:
+                if lang == "ar":
+                    return "❌ الرجاء إدخال سبب واحد على الأقل"
+                return "❌ Please enter at least one cause"
+            user_data["step"] = 5
+            if "step_5_sub" in user_data:
+                del user_data["step_5_sub"]
+            save_user(chat_id, user_data)
+            if lang == "ar":
+                return "⏱️ ما هو وقت التشغيل الكلي (بالساعات)؟"
+            return "⏱️ What is the total operating time (in hours)?"
+
+        parts = text.strip().split()
+        if len(parts) < 2:
+            if lang == "ar":
+                return "❌ صيغة خاطئة!\nمثال صحيح: 'فساد 1'"
+            return "❌ Wrong format!\nCorrect example: 'corrosion 1'"
+
+        try:
+            cause_value = int(parts[-1])
+        except ValueError:
+            if lang == "ar":
+                return "❌ الرقم غير صحيح"
+            return "❌ The last part must be a number"
+
+        main = user_data["current_main"]
+        if main not in user_data["causes_dict"]:
+            user_data["causes_dict"][main] = []
+        user_data["causes_dict"][main].append(cause_value)
+        user_data["counter"] += 1
+        save_user(chat_id, user_data)
+        if lang == "ar":
+            return f"✅ تم الإضافة! ({user_data['counter']-1} سبب)\nأدخل السبب التالي، أو 'FINISH' لإنهاء"
+        return f"✅ Added! ({user_data['counter']-1} cause(s))\nEnter next cause, or 'FINISH' to finish"
+
+    # Step 5: Operating parameters
+    if step == 5:
+        if "step_5_sub" not in user_data:
+            user_data["step_5_sub"] = 0
+
+        if user_data["step_5_sub"] == 0:
+            try:
+                user_data["total"] = float(text.replace(',', '.'))
+                user_data["step_5_sub"] = 1
+                save_user(chat_id, user_data)
+                if lang == "ar":
+                    return "⏸️ ما هو وقت التوقف المخطط (بالساعات)؟"
+                return "⏸️ What is the planned stop time (in hours)?"
+            except:
+                if lang == "ar":
+                    return "❌ الرجاء إدخال رقم صحيح"
+                return "❌ Please enter a valid number"
+
+        if user_data["step_5_sub"] == 1:
+            try:
+                user_data["stops"] = float(text.replace(',', '.'))
+                user_data["step_5_sub"] = 2
+                save_user(chat_id, user_data)
+                if lang == "ar":
+                    return "🔧 كم عدد الأعطال؟"
+                return "🔧 How many failures?"
+            except:
+                if lang == "ar":
+                    return "❌ الرجاء إدخال رقم صحيح"
+                return "❌ Please enter a valid number"
+
+        if user_data["step_5_sub"] == 2:
+            try:
+                user_data["fail"] = float(text.replace(',', '.'))
+                user_data["step_5_sub"] = 3
+                save_user(chat_id, user_data)
+                if lang == "ar":
+                    return "🛠️ ما هو وقت الإصلاح الكلي (بالساعات)؟"
+                return "🛠️ What is the total repair time (in hours)?"
+            except:
+                if lang == "ar":
+                    return "❌ الرجاء إدخال رقم صحيح"
+                return "❌ Please enter a valid number"
+
+        if user_data["step_5_sub"] == 3:
+            try:
+                user_data["repair"] = float(text.replace(',', '.'))
+
+                total = user_data["total"]
+                stops = user_data["stops"]
+                fail = user_data["fail"]
+                repair = user_data["repair"]
+
+                aot = total - stops
+                mttr = repair / fail if fail > 0 else 0
+                mtbf = aot / fail if fail > 0 else aot
+                av = mtbf / (mtbf + mttr) * 100 if (mtbf + mttr) > 0 else 0
+
+                user_data["metrics"] = {"aot": aot, "mttr": mttr, "mtbf": mtbf, "av": av}
+
+                bio1 = metrics_table(aot, mttr, mtbf, av, lang)
+                caption1 = "📈 **مقاييس الأداء**" if lang == "ar" else "📈 **Performance Metrics**"
+                send_photo(chat_id, bio1.getvalue(), caption1)
+
+                bio2 = pareto_table(user_data["causes_dict"], lang)
+                caption2 = "📊 **جدول تحليل باريتو**" if lang == "ar" else "📊 **Pareto Analysis Table**"
+                send_photo(chat_id, bio2.getvalue(), caption2)
+
+                bio3 = pareto_chart(user_data["causes_dict"], lang)
+                caption3 = "📉 **مخطط باريتو**" if lang == "ar" else "📉 **Pareto Chart**"
+                send_photo(chat_id, bio3.getvalue(), caption3)
+
+                user_data["step"] = 6
+                user_data["why5_list"] = []
+                del user_data["step_5_sub"]
+                save_user(chat_id, user_data)
+
+                if lang == "ar":
+                    return f"🔍 **تحليل 5 لماذا**\n\nلماذا ({user_data['problem']})؟"
+                return f"🔍 **5 Why Analysis**\n\nWhy ({user_data['problem']})?"
+
+            except Exception as e:
+                return f"❌ Error: {e}"
+
+    # Step 6: 5 Why
+    if step == 6:
+        user_data["why5_list"].append(text)
+
+        if len(user_data["why5_list"]) < 5:
+            save_user(chat_id, user_data)
+            if lang == "ar":
+                return f"❓ لماذا ({text})؟"
+            return f"❓ Why ({text})?"
+        else:
+            causes_dict = user_data["causes_dict"]
+            counts = {k: sum(v) for k, v in causes_dict.items()}
+            sorted_items = sorted(counts.items(), key=lambda x: x[1], reverse=True)
+            top_causes = [x[0] for x in sorted_items[:2]]
+
+            metrics = user_data.get("metrics", {})
+            mtbf = metrics.get("mtbf", 0)
+            mttr = metrics.get("mttr", 0)
+            availability = metrics.get("av", 0)
+
+            bio4 = why5_table(user_data["problem"], user_data["why5_list"], lang)
+            caption4 = "🔍 **تحليل 5 لماذا**" if lang == "ar" else "🔍 **5 Why Analysis**"
+            send_photo(chat_id, bio4.getvalue(), caption4)
+
+            result1 = professional_root_cause_with_recommendation(
+                why5_list=user_data["why5_list"],
+                top_causes=top_causes,
+                mtbf=mtbf,
+                mttr=mttr,
+                availability=availability,
+                primary_cause=top_causes[0] if top_causes else "Unknown",
+                lang=lang
+            )
+
+            root_cause, recommendation, top_causes2 = smart_analysis(
+                user_data["causes_dict"],
+                user_data.get("metrics", {}),
+                user_data["why5_list"],
+                user_data["problem"]
+            )
+
+            summary = "📋 **ملخص الأسباب المدخلة:**\n\n" if lang == "ar" else "📋 **Summary of Entered Causes:**\n\n"
+            for cause, values in user_data["causes_dict"].items():
+                summary += f"• **{cause}**: {len(values)} سبب (القيم: {values})\n" if lang == "ar" else f"• **{cause}**: {len(values)} cause(s) (values: {values})\n"
+
+            user_data["step"] = 7
+            save_user(chat_id, user_data)
+
+            final_message = result1 + "\n\n" + "🧠 **التحليل الذكي:**\n" + root_cause + "\n\n" + summary + "\n\n🎉 **اكتمل التحليل!**\nأرسل /reset لبدء تحليل جديد"
+            if lang != "ar":
+                final_message = result1 + "\n\n" + "🧠 **Smart Analysis:**\n" + root_cause + "\n\n" + summary + "\n\n🎉 **Analysis Completed!**\nSend /reset to start a new analysis"
+            
+            send_message(chat_id, final_message)
+            return ""
+
+    if step == 7:
+        if lang == "ar":
+            send_message(chat_id, "✅ التحليل مكتمل بالفعل!\nأرسل /reset لبدء تحليل جديد")
+        else:
+            send_message(chat_id, "✅ Analysis already completed!\nSend /reset to start a new analysis")
+        return ""
+
+    return f"✅ Received: {text}"
+
+# ========= COMMAND HANDLERS =========
+def start_handler(chat_id):
+    old_lang = get_user(chat_id).get("language", "en")
+    delete_user(chat_id)
+    user_data = get_user(chat_id)
+    user_data["language"] = old_lang
+    user_data["step"] = 1
+    user_data["causes_dict"] = {}
+    user_data["counter"] = 1
+    user_data["why5_list"] = []
+    if "step_5_sub" in user_data:
+        del user_data["step_5_sub"]
+    save_user(chat_id, user_data)
+
+    lang = user_data.get("language", "en")
+    if lang == "ar":
+        send_message(chat_id, """🤖 **مرحباً بك في بوت تحليل الجودة المتطور!**
+
+سأساعدك في تحليل مشكلات الجودة باستخدام:
+📊 تحليل باريتو
+🔍 تحليل 5 لماذا
+📈 مقاييس MTBF و MTTR
+🧠 تحليل ذكي للسبب الجذري
+
+📝 **ما هي المشكلة التي تواجهها؟**""")
+    else:
+        send_message(chat_id, """🤖 **Welcome to Quality Analysis Bot!**
+
+I will help you analyze quality problems using:
+📊 Pareto Analysis
+🔍 5 Why Analysis
+📈 MTBF & MTTR Metrics
+🧠 Smart Root Cause Analysis
+
+📝 **What is the problem you are facing?**""")
+    return ""
+
+def reset_handler(chat_id):
+    delete_user(chat_id)
+    lang = get_user(chat_id).get("language", "en")
+    if lang == "ar":
+        send_message(chat_id, "✅ تم إعادة التعيين!\nأرسل /start لبدء تحليل جديد")
+    else:
+        send_message(chat_id, "✅ Reset completed!\nSend /start to begin a new analysis")
+    return ""
+
+def status_handler(chat_id):
+    user_data = get_user(chat_id)
+    step = user_data.get("step", 1)
+    problem = user_data.get("problem", "غير محدد" if user_data.get("language") == "ar" else "Not set")
+    lang = user_data.get("language", "en")
+
+    if lang == "ar":
+        status_text = f"📊 **حالة التحليل**\n\n"
+        status_text += f"📝 المشكلة: {problem}\n"
+        status_text += f"🔢 المرحلة: {step}/7\n"
+
+        if user_data.get("causes_dict"):
+            total_causes = sum(len(v) for v in user_data["causes_dict"].values())
+            status_text += f"📋 عدد الأسباب المدخلة: {total_causes}\n"
+
+        if user_data.get("why5_list"):
+            status_text += f"❓ تحليل 5 لماذا: {len(user_data['why5_list'])}/5\n"
+    else:
+        status_text = f"📊 **Analysis Status**\n\n"
+        status_text += f"📝 Problem: {problem}\n"
+        status_text += f"🔢 Step: {step}/7\n"
+
+        if user_data.get("causes_dict"):
+            total_causes = sum(len(v) for v in user_data["causes_dict"].values())
+            status_text += f"📋 Causes entered: {total_causes}\n"
+
+        if user_data.get("why5_list"):
+            status_text += f"❓ 5 Why Analysis: {len(user_data['why5_list'])}/5\n"
+
+    send_message(chat_id, status_text)
+    return ""
+
+def help_handler(chat_id, lang):
+    if lang == "ar":
+        help_text = """🤖 **مساعدة البوت**
+
+**الأوامر:**
+/start - بدء تحليل جديد
+/reset - إعادة تعيين الجلسة
+/status - عرض حالة التحليل الحالي
+/help - عرض هذه المساعدة
+/lang - تغيير اللغة
+
+**كيفية الاستخدام:**
+1️⃣ اكتب المشكلة التي تواجهها
+2️⃣ اكتب اسم القسم (إنتاج، صيانة، جودة...)
+3️⃣ اختر السبب الرئيسي من الأزرار
+4️⃣ أدخل الأسباب الفرعية مع أرقام (مثال: 'سبب 1')
+5️⃣ استخدم 'NEXT' لتغيير السبب الرئيسي
+6️⃣ استخدم 'FINISH' لإنهاء إدخال الأسباب
+7️⃣ أدخل بيانات التشغيل المطلوبة
+8️⃣ أجب على 5 أسئلة "لماذا"
+9️⃣ احصل على تقرير تحليل كامل مع رسوم بيانية
+
+**مثال:**
+- المشكلة: "توقف متكرر للآلة"
+- القسم: "الإنتاج"
+- سبب رئيسي: "الآلة"
+- أسباب فرعية: "تآكل محمل 1"، "خلل كهربائي 2"
+- بيانات التشغيل: 1000 ساعة، 50 ساعة توقف، 10 أعطال، 30 ساعة إصلاح"""
+    else:
+        help_text = """🤖 **Bot Help**
+
+**Commands:**
+/start - Start a new analysis
+/reset - Reset current session
+/status - Show current analysis status
+/help - Show this help message
+/lang - Change language
+
+**How to use:**
+1️⃣ Enter the problem you're facing
+2️⃣ Enter the department name
+3️⃣ Select the main cause from buttons
+4️⃣ Enter sub-causes with numbers (example: 'cause 1')
+5️⃣ Use 'NEXT' to change the main cause
+6️⃣ Use 'FINISH' to finish entering causes
+7️⃣ Enter the required operating parameters
+8️⃣ Answer 5 "Why" questions
+9️⃣ Get a complete analysis report with charts
+
+**Example:**
+- Problem: "Frequent machine stoppage"
+- Department: "Production"
+- Main cause: "Machine"
+- Sub-causes: "Bearing wear 1", "Electrical fault 2"
+- Operating data: 1000 hours, 50 hours stop, 10 failures, 30 hours repair"""
+    
+    send_message(chat_id, help_text)
+    return ""
+
+# ========= PROCESS MESSAGE =========
+def process_message(chat_id, text):
+    try:
+        user_data = get_user(chat_id)
+        lang = user_data.get("language", "en")
+        
+        if text == '/start':
+            start_handler(chat_id)
+        elif text == '/reset':
+            reset_handler(chat_id)
+        elif text == '/status':
+            status_handler(chat_id)
+        elif text == '/help':
+            help_handler(chat_id, lang)
+        elif text == '/lang' or text in ["English 🇬🇧", "العربية 🇸🇦"]:
+            lang_handler(chat_id, text)
+        else:
+            reply = handle_message(chat_id, text)
+            if reply:
+                send_message(chat_id, reply)
+    except Exception as e:
+        send_message(chat_id, f"❌ Error: {str(e)}")
+
+# ========= WEBHOOK =========
+@app.route('/' + TOKEN, methods=['POST'])
+def webhook():
+    try:
+        data = request.get_json()
+        if data and 'message' in data:
+            chat_id = data['message']['chat']['id']
+            text = data['message'].get('text', '')
+            process_message(chat_id, text)
+    except Exception as e:
+        print(f"Webhook error: {e}")
+    return 'OK', 200
+
+@app.route('/')
+def index():
+    return """<!DOCTYPE html>
+<html>
+<head><title>Quality Analysis Bot</title>
+<style>
+body{font-family:Arial;text-align:center;padding:50px;background:linear-gradient(135deg,#1a1a2e,#16213e);color:white;}
+.container{background:rgba(255,255,255,0.1);border-radius:20px;padding:40px;max-width:500px;margin:auto;}
+h1{font-size:48px;}
+.status{color:#22c55e;font-size:20px;margin:20px 0;}
+.bot-link{background:#1e293b;padding:10px;border-radius:10px;margin:20px 0;}
+.footer{margin-top:30px;font-size:12px;opacity:0.7;}
+</style>
+</head>
+<body>
+<div class=container>
+<h1>🤖📊</h1>
+<h1>Quality Analysis Bot</h1>
+<div class=status>🟢 ONLINE</div>
+<p>تحليل الجودة باستخدام:</p>
+<p>📊 Pareto | 🔍 5 Why | 📈 MTBF/MTTR</p>
+<div class=bot-link>👉 <strong>@ishikawa1_bot</strong></div>
+<div class=footer>Powered by Render.com</div>
+</div>
+</body>
+</html>"""
+
+if __name__ == '__main__':
+    app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 5000)))
